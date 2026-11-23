@@ -257,6 +257,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
     <div class="head">
       <div><h2>Lançamentos</h2><p id="lancSub">Escolha o tipo para ver e lançar</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="btnBiblio" type="button" hidden>Biblioteca de NF-e</button>
         <button class="btn" id="btnLote" type="button" hidden>Lançar notas em lote</button>
         <button class="btn" id="btnImpEns" type="button" hidden>Importar ensaios (planilha)</button>
         <button class="btn" id="btnCsv" type="button">Copiar tabela (CSV)</button>
@@ -331,11 +332,11 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
       <div class="drop" id="drop">
         <div>
           <p><strong>Anexar a nota</strong> para preencher sozinho</p>
-          <p class="hint">XML da NF-e ou CT-e (mais preciso), PDF do DANFE (mesmo escaneado) ou foto da nota. Também dá pra arrastar o arquivo aqui.</p>
+          <p class="hint">XML da NF-e ou CT-e (mais preciso), PDF do DANFE (mesmo escaneado) ou foto da nota. No frete, selecione o CT-e junto com os XMLs das NF-e (ou um .zip) para puxar o material.</p>
           <p class="status" id="importStatus" aria-live="polite"></p>
         </div>
         <label class="btn" for="fileNota">Escolher arquivo</label>
-        <input id="fileNota" type="file" accept=".xml,.pdf,application/pdf,text/xml,application/xml,image/png,image/jpeg" class="sr">
+        <input id="fileNota" type="file" multiple accept=".xml,.zip,.pdf,application/pdf,text/xml,application/xml,image/png,image/jpeg" class="sr">
       </div>
 
       <div class="field"><span style="font-size:12px;font-weight:600;color:var(--muted)">Tipo de lançamento</span>
@@ -354,17 +355,16 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
         <datalist id="fornLancList"></datalist>
         <div class="field" data-only="concreto"><label for="lRemessa">Nº da simples remessa</label><input id="lRemessa" inputmode="numeric" autocomplete="off"></div>
         <div class="field" data-only="concreto"><label for="lDataNF">Data de emissão da NF</label><input id="lDataNF" type="date"></div>
-        <div class="field" data-only="frete aco"><label for="lDoc">Documento</label>
+        <div class="field" data-only="aco"><label for="lDoc">Documento</label>
           <select id="lDoc"><option>NF-e</option><option>CT-e</option><option>NF remessa</option><option>Recibo</option><option>Outro</option></select></div>
         <div class="field span2" data-only="concreto aco"><label for="lPeca" id="lPecaLabel">Aplicação</label><input id="lPeca" autocomplete="off" placeholder="Ex.: Sapata Ap. 07, Travessa Ap. 05, Laje"></div>
         <div class="field"><label for="lNum" id="lNumLabel">Número da NF</label><input id="lNum" inputmode="numeric" autocomplete="off"></div>
         <div class="field span3"><label for="lChave">Chave de acesso (44 dígitos)</label><input id="lChave" class="mono" inputmode="numeric" autocomplete="off" maxlength="60"></div>
 
         <!-- FRETE -->
-        <div class="field span2" data-only="frete"><label for="lDesc">Material transportado</label><input id="lDesc" autocomplete="off" placeholder="Ex.: vigas pré-moldadas, pré-lajes"></div>
-        <div class="field" data-only="frete"><label for="lKm">KM rodado</label><input id="lKm" inputmode="decimal" autocomplete="off"></div>
-        <div class="field" data-only="frete"><label for="lOrig">Origem</label><input id="lOrig" autocomplete="off"></div>
-        <div class="field span2" data-only="frete"><label for="lDest">Destino</label><input id="lDest" autocomplete="off"></div>
+        <div class="field" data-only="frete"><label for="lNFsT">NF remessa</label><input id="lNFsT" autocomplete="off" placeholder="Nº da NF (ou mais de uma, separadas por vírgula)"></div>
+        <div class="field" data-only="frete"><label for="lMat">Material</label><select id="lMat"><option value="VIGA">Viga</option><option value="PRÉ-LAJE">Pré-laje</option><option value="OUTRO">Outro</option></select></div>
+        <div class="field" data-only="x" hidden><input id="lDesc"><input id="lPeso"><input id="lKm"><input id="lOrig"><input id="lDest"></div>
 
         <!-- AÇO -->
         <div class="field" data-only="aco"><label for="lTipoAco">Tipo</label><select id="lTipoAco"><option>CA-50</option><option>CA-60</option><option>Tela soldada</option><option>Arame recozido</option><option>Outro</option></select></div>
@@ -484,6 +484,24 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
       </div>
     </div>
   </form>
+</div>
+
+<!-- MODAL BIBLIOTECA NF-e -->
+<div class="overlay" id="mBiblio" hidden>
+  <div class="modal" style="width:min(900px,100%)">
+    <div class="modal-h"><h2>Biblioteca de NF-e</h2><button class="btn ghost small" type="button" data-close>Fechar</button></div>
+    <div class="modal-b">
+      <div class="drop" id="dropBiblio">
+        <div><p><strong>Suba as NF-e</strong>: XML (vários de uma vez ou .zip) ou PDF do DANFE</p>
+          <p class="hint">Quando você lançar um CT-e, o sistema procura aqui as notas que ele transporta e preenche o material, o peso e a obra sozinho.</p>
+          <p class="status" id="biblioStatus" aria-live="polite"></p></div>
+        <label class="btn" for="fileBiblio">Escolher arquivos</label>
+        <input id="fileBiblio" type="file" multiple accept=".xml,.zip,.pdf,text/xml,application/xml,application/zip,application/pdf,image/*" class="sr">
+      </div>
+      <div class="field"><label for="biblioBusca">Procurar nota</label><input id="biblioBusca" type="search" placeholder="Número, emitente, chave ou material"></div>
+      <div class="tbl-wrap"><table id="tblBiblio"></table></div>
+    </div>
+  </div>
 </div>
 
 <!-- MODAL LOTE -->
@@ -624,7 +642,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 15h35</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 17h00</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -665,7 +683,7 @@ const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getT
 const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
 
 let db = null, sample = null;
-let obras = [], lancs = [], orc = {}, precos = [], reidi = {}, orcVersionLoaded = false;
+let obras = [], lancs = [], orc = {}, precos = [], reidi = {}, notasNFe = [], orcVersionLoaded = false;
 let loaded = { obras: false, lancs: false };
 let resumoCat = "frete";
 let dbState = "carregando"; // carregando | ok | sem-acesso | lento
@@ -728,7 +746,7 @@ function renderPainel() {
       const pct = pctOf(u.valor, orcV);
       const saldo = orcV - uAll.valor;
       const qtdTxt = cat === "frete"
-        ? `<dt>Viagens</dt><dd>${nf0.format(u.qtd)}</dd><dt>KM rodado</dt><dd>${nf.format(u.km)} km</dd>`
+        ? (() => { const r = qtdPorMat(ls); return `<dt>Vigas entregues</dt><dd>${nf0.format(r.VIGA)}</dd><dt>Pré-lajes entregues</dt><dd>${nf0.format(r["PRÉ-LAJE"])}</dd>`; })()
         : `<dt>Quantidade</dt><dd>${nf.format(u.qtd)} ${c.un}</dd><dt>Custo médio</dt><dd>${u.qtd ? money(u.valor / u.qtd) + "/" + c.unLanc : "—"}</dd>`;
       return `<article class="cat" style="--c:${c.cor}">
         <div class="cat-h"><h3>${c.nome}</h3>${statusPill(pctAll, orcV)}</div>
@@ -754,16 +772,16 @@ function renderPainel() {
   else {
     linhas.sort((a, b) => (a.o ? 0 : 1) - (b.o ? 0 : 1) || (a.o?.nome || "").localeCompare(b.o?.nome || ""));
     const tot = { frete: usoOf(lancs.filter((l) => !sel || l.obraId === sel), "frete"), concreto: usoOf(lancs.filter((l) => !sel || l.obraId === sel), "concreto"), aco: usoOf(lancs.filter((l) => !sel || l.obraId === sel), "aco") };
-    const cell = (u, k) => {
+    const cell = (u, k, lancsDaLinha) => {
       const share = tot[k].valor ? (u.valor / tot[k].valor) * 100 : 0;
-      const q = k === "frete" ? `${viag(u.qtd)}${u.km ? " · " + nf.format(u.km) + " km" : ""}` : `${nf.format(u.qtd)} ${CATS[k].un}`;
+      const q = k === "frete" ? txtMat(qtdPorMat(lancsDaLinha)) : `${nf.format(u.qtd)} ${CATS[k].un}`;
       return `<td style="--c:${CATS[k].cor}"><div class="mini"><strong class="num" style="font-weight:600">${money(u.valor)}</strong><div class="bar"><i style="width:${Math.min(share, 100)}%"></i></div><span>${u.n ? q : "—"}</span></div></td>`;
     };
     t.innerHTML = `<thead><tr><th>Obra</th>${CAT_KEYS.map((k) => `<th>${CATS[k].nome}</th>`).join("")}<th class="n">Total</th></tr></thead><tbody>` +
       linhas.map(({ o, lo }) => {
         const us = CAT_KEYS.map((k) => usoOf(lo, k));
         const total = us.reduce((a, u) => a + u.valor, 0);
-        return `<tr><td>${o ? `<strong>${esc(o.nome)}</strong><div class="muted" style="font-size:12px">${esc([o.codigo && "UN " + o.codigo, o.km].filter(Boolean).join(" · "))}</div>` : `<span class="pill warn">Obra a definir</span>`}</td>${us.map((u, i) => cell(u, CAT_KEYS[i])).join("")}<td class="n">${money(total)}</td></tr>`;
+        return `<tr><td>${o ? `<strong>${esc(o.nome)}</strong><div class="muted" style="font-size:12px">${esc([o.codigo && "UN " + o.codigo, o.km].filter(Boolean).join(" · "))}</div>` : `<span class="pill warn">Obra a definir</span>`}</td>${us.map((u, i) => cell(u, CAT_KEYS[i], lo)).join("")}<td class="n">${money(total)}</td></tr>`;
       }).join("") +
       `</tbody><tfoot><tr><td>Total</td>${CAT_KEYS.map((k) => `<td class="num">${money(tot[k].valor)}</td>`).join("")}<td class="n">${money(CAT_KEYS.reduce((a, k) => a + tot[k].valor, 0))}</td></tr></tfoot>`;
   }
@@ -777,7 +795,7 @@ function renderPainel() {
 }
 function grupo(list, keyFn) {
   const m = new Map();
-  for (const l of list) { const k = keyFn(l) || "—"; const g = m.get(k) || { k, valor: 0, qtd: 0, km: 0, n: 0 }; g.valor += Number(l.valor) || 0; g.qtd += Number(l.qtd) || 0; g.km += Number(l.km) || 0; g.n++; m.set(k, g); }
+  for (const l of list) { const k = keyFn(l) || "—"; const g = m.get(k) || { k, valor: 0, qtd: 0, km: 0, n: 0, ls: [] }; g.ls.push(l); g.valor += Number(l.valor) || 0; g.qtd += Number(l.qtd) || 0; g.km += Number(l.km) || 0; g.n++; m.set(k, g); }
   return [...m.values()];
 }
 function renderResumo(ls) {
@@ -786,16 +804,16 @@ function renderResumo(ls) {
   const lc = ls.filter((l) => l.categoria === cat);
   const box = $("#resumoBox");
   if (!lc.length) { box.innerHTML = `<p class="empty" style="grid-column:1/-1;margin:0">Nenhum lançamento de ${c.nome.toLowerCase()} ${$("#obraGlobal").value ? "nesta obra" : "ainda"}.</p>`; return; }
-  const qCol = (g) => cat === "frete" ? `${nf0.format(g.qtd)}${g.km ? ` · ${nf.format(g.km)} km` : ""}` : `${nf.format(g.qtd)} ${c.un}`;
-  const qHead = cat === "frete" ? "Viagens" : c.un;
+  const qCol = (g) => cat === "frete" ? txtMat(qtdPorMat(g.ls || [])) : `${nf.format(g.qtd)} ${c.un}`;
+  const qHead = cat === "frete" ? "Entregue" : c.un;
   const tabela = (titulo, linhas, rotulo) => `<div><h3 style="font-size:14px;margin-bottom:6px">${titulo}</h3><div class="tbl-wrap"><table><thead><tr><th>${rotulo}</th><th class="n">${qHead}</th><th class="n">Valor</th><th class="n">Notas</th></tr></thead><tbody>${linhas.map((g) => `<tr><td>${esc(g.label ?? g.k)}</td><td class="n">${qCol(g)}</td><td class="n">${money(g.valor)}</td><td class="n">${g.n}</td></tr>`).join("")}</tbody></table></div></div>`;
   const meses = grupo(lc, (l) => (l.data || "").slice(0, 7)).sort((a, b) => b.k.localeCompare(a.k)).slice(0, 12).map((g) => ({ ...g, label: g.k === "—" ? "Sem data" : g.k.split("-").reverse().join("/") }));
   const forn = grupo(lc, (l) => l.fornecedor).sort((a, b) => b.valor - a.valor).slice(0, 10);
   const mat = cat === "concreto"
     ? grupo(lc, (l) => (n2(l.fckProjeto) != null ? "fck " + nf.format(l.fckProjeto) + " MPa" : "fck não informado")).sort((a, b) => b.qtd - a.qtd)
     : cat === "aco" ? grupo(lc, (l) => [l.tipoAco, l.bitola ? "Ø " + String(l.bitola).replace(".", ",") + " mm" : ""].filter(Boolean).join(" · ") || (l.descricao || "").slice(0, 60)).sort((a, b) => b.qtd - a.qtd)
-    : grupo(lc, (l) => (l.descricao || "").slice(0, 60)).sort((a, b) => b.valor - a.valor).slice(0, 10);
-  box.innerHTML = tabela("Por mês", meses, "Mês") + tabela(cat === "frete" ? "Por transportadora" : "Por fornecedor", forn, cat === "frete" ? "Transportadora" : "Fornecedor") + tabela(cat === "frete" ? "Por material transportado" : cat === "concreto" ? "Por fck" : "Por tipo e bitola", mat, cat === "concreto" ? "fck" : "Material");
+    : grupo(lc, (l) => obraNome(l.obraId)).sort((a, b) => b.valor - a.valor).slice(0, 12);
+  box.innerHTML = tabela("Por mês", meses, "Mês") + tabela(cat === "frete" ? "Por transportadora" : "Por fornecedor", forn, cat === "frete" ? "Transportadora" : "Fornecedor") + tabela(cat === "frete" ? "Por obra" : cat === "concreto" ? "Por fck" : "Por tipo e bitola", mat, cat === "frete" ? "Obra" : cat === "concreto" ? "fck" : "Material");
 }
 $$("#segResumo button").forEach((b) => (b.onclick = () => { resumoCat = b.dataset.cat; renderResumo(scopeLancs()); }));
 function sortLanc(a, b) { return (b.data || "").localeCompare(a.data || "") || (b.criadoEm || 0) - (a.criadoEm || 0); }
@@ -838,9 +856,9 @@ const abrir = (l) => `<td><button class="btn small" type="button" data-edit="${e
 const LAYOUT = {
   frete: {
     sub: "CT-es e notas de frete",
-    head: ["Data", "Obra", "Documento", "Transportadora", "Material", "Rota", "n:Viagens", "n:KM", "n:Valor", ""],
-    row: (l) => `<td class="num">${fmtDate(l.data)}</td><td>${obraCell(l)}</td><td>${docCell(l)}</td><td class="trunc">${esc(l.fornecedor || "")}</td><td class="trunc">${esc(l.descricao || "")}</td><td class="trunc">${l.origem || l.destino ? `${esc(l.origem || "?")} → ${esc(l.destino || "?")}` : "—"}</td><td class="n">${nf0.format(l.qtd || 0)}</td><td class="n">${l.km ? nf.format(l.km) : "—"}</td><td class="n">${money(l.valor)}</td>${abrir(l)}`,
-    foot: (ls) => `<td colspan="6">${ls.length} lançamento(s)</td><td class="n">${nf0.format(ls.reduce((a, l) => a + (Number(l.qtd) || 0), 0))}</td><td class="n">${nf.format(ls.reduce((a, l) => a + (Number(l.km) || 0), 0))}</td><td class="n">${money(ls.reduce((a, l) => a + (Number(l.valor) || 0), 0))}</td><td></td>`,
+    head: ["Data", "CT-e", "NF remessa", "Obra", "n:Quant.", "Material", "Transportadora", "n:Valor frete", ""],
+    row: (l) => `<td class="num">${fmtDate(l.data)}</td><td class="num">${l.numero ? esc(l.numero) : `<span class="pill warn">Aguardando CT-e</span>`}</td><td class="num">${esc((l.nfsTransp || []).map((n) => n.numero).join(", ")) || "—"}</td><td>${obraCell(l)}</td><td class="n">${nf0.format(l.qtd || 0)}</td><td>${esc(MAT_TXT[matFrete(l)])}</td><td class="trunc">${esc(l.fornecedor || "")}</td><td class="n">${l.valor ? money(l.valor) : "—"}</td>${abrir(l)}`,
+    foot: (ls) => `<td colspan="4">${ls.length} lançamento(s)</td><td colspan="2">${txtMat(qtdPorMat(ls))}</td><td></td><td class="n">${money(ls.reduce((a, l) => a + (Number(l.valor) || 0), 0))}</td><td></td>`,
   },
   concreto: {
     sub: "Remessas de concreto, peças concretadas e ensaios",
@@ -855,10 +873,15 @@ const LAYOUT = {
     foot: (ls) => `<td colspan="6">${ls.length} nota(s)</td><td class="n">${nf.format(ls.reduce((a, l) => a + (Number(l.qtd) || 0), 0))} kg</td><td class="n">${money(ls.reduce((a, l) => a + (Number(l.valor) || 0), 0))}</td><td></td>`,
   },
 };
+const matDe = (t) => { const u = normTxt(t); return /PR[E]?\s*-?\s*LAJE|PRELAJE/.test(u) ? "PRÉ-LAJE" : /VIGA/.test(u) ? "VIGA" : ""; };
+const matFrete = (l) => l.material || matDe(l.descricao) || "OUTRO";
+const MAT_TXT = { VIGA: "Viga", "PRÉ-LAJE": "Pré-laje", OUTRO: "Outro" };
+function qtdPorMat(ls) { const r = { VIGA: 0, "PRÉ-LAJE": 0, OUTRO: 0 }; for (const l of ls) if (l.categoria === "frete") r[matFrete(l)] = (r[matFrete(l)] || 0) + (Number(l.qtd) || 0); return r; }
+const txtMat = (r) => [`${nf0.format(r.VIGA)} viga${r.VIGA === 1 ? "" : "s"}`, `${nf0.format(r["PRÉ-LAJE"])} pré-laje${r["PRÉ-LAJE"] === 1 ? "" : "s"}`].concat(r.OUTRO ? [`${nf0.format(r.OUTRO)} outros`] : []).join(" · ");
 const tipoDe = (l) => {
   if (l.categoria === "concreto") return l.servico ? "Bombeamento" : n2(l.fckProjeto) != null ? "FCK " + nf.format(l.fckProjeto) + (l.traco ? " · " + l.traco : "") : (l.traco || "Sem FCK");
   if (l.categoria === "aco") return [l.tipoAco, l.bitola ? "Ø " + String(l.bitola).replace(".", ",") + " mm" : ""].filter(Boolean).join(" · ") || "Sem tipo";
-  return l.descricao || "Sem descrição";
+  return MAT_TXT[matFrete(l)];
 };
 const emissao = (l) => l.dataNF || l.data || "";
 function fillFiltros() {
@@ -898,7 +921,7 @@ function filteredLancs() {
     if (ate && emissao(l) > ate) return false;
     if (mes && !(l.data || "").startsWith(mes)) return false;
     if (q) {
-      const hay = [l.numero, l.remessa, l.traco, l.fornecedor, l.descricao, l.peca, l.chave, l.obs, l.origem, l.destino, l.bitola, l.tipoAco, obraNome(l.obraId)].join(" ").toLowerCase();
+      const hay = [l.numero, l.remessa, l.traco, (l.nfsTransp || []).map((n) => n.numero).join(" "), l.fornecedor, l.descricao, l.peca, l.chave, l.obs, l.origem, l.destino, l.bitola, l.tipoAco, obraNome(l.obraId)].join(" ").toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -910,7 +933,7 @@ function renderLancs() {
   const L = LAYOUT[lancCat];
   $("#lancSub").textContent = L.sub;
   $("#btnNovoLanc2").textContent = "+ Novo lançamento de " + CATS[lancCat].nome.toLowerCase();
-  $("#btnImpEns").hidden = lancCat !== "concreto"; $("#btnLote").hidden = lancCat !== "concreto";
+  $("#btnImpEns").hidden = lancCat !== "concreto"; $("#btnLote").hidden = lancCat !== "concreto"; $("#btnBiblio").hidden = lancCat !== "frete";
   const ls = filteredLancs();
   const t = $("#tblLanc");
   const temCat = lancs.some((l) => l.categoria === lancCat);
@@ -927,7 +950,7 @@ async function copiarCsv() {
   const base = ["Data", "Obra", "Documento", "Número", "Chave", "Fornecedor"];
   const bv = (l) => [fmtDate(l.data), obraNome(l.obraId), l.doc, l.numero, l.chave, l.fornecedor];
   const spec = {
-    frete: [["Material", "Viagens", "KM", "Origem", "Destino", "Valor", "Observação"], (l) => [l.descricao, fmtIn(l.qtd), fmtIn(l.km), l.origem, l.destino, fmtIn(l.valor), l.obs]],
+    frete: [["NF remessa", "Quantidade", "Material", "Valor do frete", "Observação"], (l) => [(l.nfsTransp || []).map((n) => n.numero).join(", "), fmtIn(l.qtd), MAT_TXT[matFrete(l)], fmtIn(l.valor), l.obs]],
     concreto: [["Remessa", "Data da remessa", "Data de emissão da NF", "Aplicação", "Traço", "fck projeto", "fck aplicado", "Volume m³", "CP1 7d", "CP2 7d", "Ruptura 7d", "CP1 28d", "CP2 28d", "Ruptura 28d", "Valor", "Observação"], (l) => [l.remessa, fmtDate(l.data), fmtDate(l.dataNF), l.peca, l.traco, fmtIn(l.fckProjeto), fmtIn(l.fckAplicado), fmtIn(l.qtd), e(l, "d7", "cp1"), e(l, "d7", "cp2"), fmtDate((l.ensaios?.d7 || {}).data), e(l, "d28", "cp1"), e(l, "d28", "cp2"), fmtDate((l.ensaios?.d28 || {}).data), fmtIn(l.valor), l.obs]],
     aco: [["Tipo", "Bitola mm", "Peça", "Peso kg", "Valor", "Observação"], (l) => [l.tipoAco, fmtIn(l.bitola), l.peca, fmtIn(l.qtd), fmtIn(l.valor), l.obs]],
   }[lancCat];
@@ -946,7 +969,7 @@ function renderObras() {
     let total = 0;
     const rows = CAT_KEYS.map((k) => {
       const u = usoOf(lo, k); total += u.valor;
-      const q = k === "frete" ? `${viag(u.qtd)}${u.km ? " · " + nf.format(u.km) + " km" : ""}` : `${nf.format(u.qtd)} ${CATS[k].un}`;
+      const q = k === "frete" ? txtMat(qtdPorMat(lo)) : `${nf.format(u.qtd)} ${CATS[k].un}`;
       return `<tr><td><span class="tag" style="--c:${CATS[k].cor}">${CATS[k].nome}</span></td><td class="n">${u.n ? q : "—"}</td><td class="n">${money(u.valor)}</td><td class="n">${u.n}</td></tr>`;
     }).join("");
     return `<article class="obra">
@@ -996,7 +1019,7 @@ $$(".overlay:not(#mLogin)").forEach((ov) => {
 /* ---------- Lançamento: formulário ---------- */
 let editLanc = null, curCat = "frete", importMeta = null;
 const FORM_TXT = {
-  frete: { forn: "Transportadora", qtd: "Viagens", num: "Número do CT-e / NF", data: "Data *", valor: "Valor do frete (R$) *" },
+  frete: { forn: "Transportadora", qtd: "Quantidade (peças)", num: "Nº do CT-e", data: "Data *", valor: "Valor do frete (R$)" },
   concreto: { forn: "Concreteira *", qtd: "", num: "Número da NF", data: "Data da remessa (concretagem) *", valor: "" },
   aco: { forn: "Fornecedor do aço", qtd: "Peso (kg)", num: "Número da NF", data: "Data *", valor: "Valor (R$)" },
 };
@@ -1143,6 +1166,9 @@ function openLanc(l, cat) {
   const dsc = (l && l.desconto) || {}; $("#dPct").value = fmtIn(dsc.pct); $("#dVal").value = fmtIn(dsc.valor);
   $("#lTipoAco").value = v("tipoAco", "CA-50"); $("#lBitola").value = l && l.bitola ? String(l.bitola).replace(".", ",") : "";
   $("#lQtd").value = l ? fmtIn(l.qtd) : ""; $("#lValor").value = l ? fmtIn(l.valor) : "";
+  $("#lMat").value = l && l.categoria === "frete" ? matFrete(l) : "VIGA";
+  $("#lNFsT").value = l && l.nfsTransp ? l.nfsTransp.map((n) => n.numero).join(", ") : ""; $("#lPeso").value = l ? fmtIn(l.pesoKg) : "";
+  $("#lancMsg").dataset.nfes = l && l.nfsTransp ? JSON.stringify(l.nfsTransp) : "";
   $("#lKm").value = l ? fmtIn(l.km) : ""; $("#lOrig").value = v("origem"); $("#lDest").value = v("destino"); $("#lObs").value = v("obs");
   $("#e7a").value = fmtIn((ens.d7 || {}).cp1); $("#e7b").value = fmtIn((ens.d7 || {}).cp2); $("#e7d").value = (ens.d7 || {}).data || "";
   $("#e14a").value = fmtIn((ens.d14 || {}).cp1); $("#e14b").value = fmtIn((ens.d14 || {}).cp2); $("#e14d").value = (ens.d14 || {}).data || "";
@@ -1172,7 +1198,7 @@ $("#formLanc").addEventListener("submit", async (e) => {
     if (!parseNum($("#cM3").value)) { msg.className = "status err"; msg.textContent = "Informe a quantidade realizada (m³)."; return; }
   } else if (!valor) { const c = calcValor(formLancLike()); if (c) { valor = c.valor; valorCalc = true; precoId = c.preco.id; } }
   if (!$("#lData").value) { msg.className = "status err"; msg.textContent = "Informe a data."; return; }
-  if (!valor && curCat === "frete") { msg.className = "status err"; msg.textContent = "Informe o valor do frete."; return; }
+  if (!valor && curCat === "frete" && $("#lNum").value.trim()) { msg.className = "status err"; msg.textContent = "Informe o valor do frete (ou apague o nº do CT-e para salvar como aguardando CT-e)."; return; }
   if (curCat === "aco" && !parseNum($("#lQtd").value)) { msg.className = "status err"; msg.textContent = curCat === "concreto" ? "Informe o volume (m³)." : "Informe o peso (kg)."; return; }
   const chave = onlyDigits($("#lChave").value);
   const dup = chave && lancs.find((x) => x.chave === chave && (!editLanc || x.id !== editLanc.id));
@@ -1197,7 +1223,14 @@ $("#formLanc").addEventListener("submit", async (e) => {
     qtd: curCat === "concreto" ? 0 : (qtdRaw ? parseNum(qtdRaw) : (curCat === "frete" ? 1 : 0)),
     unidade: curCat === "frete" ? "viagem" : CATS[curCat].un,
     valor: Math.round(valor * 100) / 100,
-    km: curCat === "frete" ? parseNum($("#lKm").value) : 0,
+    km: 0,
+    ...(curCat === "frete" ? { material: $("#lMat").value } : {}),
+    ...(curCat === "frete" ? (() => {
+      const lst = (() => { try { return JSON.parse($("#lancMsg").dataset.nfes || "[]"); } catch { return []; } })();
+      const nums = $("#lNFsT").value.split(/[,;\s]+/).map((x) => x.replace(/\D/g, "")).filter(Boolean).map((x) => String(Number(x)));
+      const nfsTransp = nums.map((n) => lst.find((x) => String(Number(x.numero)) === n) || { chave: "", numero: n, emitente: "", itens: [] });
+      return { nfsTransp, pesoKg: $("#lPeso").value ? parseNum($("#lPeso").value) : null };
+    })() : {}),
     origem: curCat === "frete" ? $("#lOrig").value.trim() : "",
     destino: curCat === "frete" ? $("#lDest").value.trim() : "",
     obs: $("#lObs").value.trim(),
@@ -1249,8 +1282,8 @@ function dbErr(err) {
 const drop = $("#drop");
 ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", (e) => { const f = e.dataTransfer.files[0]; if (f) importar(f); });
-$("#fileNota").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) importar(f); });
+drop.addEventListener("drop", (e) => { const fs = [...e.dataTransfer.files]; if (fs.length) importarVarios(fs); });
+$("#fileNota").addEventListener("change", (e) => { const fs = [...e.target.files]; if (fs.length) importarVarios(fs); e.target.value = ""; });
 
 function setImp(text, cls = "") { const s = $("#importStatus"); s.textContent = text; s.className = "status " + cls; }
 
@@ -1425,6 +1458,213 @@ async function lerImagemConcreto(img, blob) {
   try { const txt = await ocrImagem(img); applyConcreto(parseNotaConcreto(txt), "ocr"); }
   catch (e) { console.error(e); setImp("Não consegui ler a imagem da nota. Preencha manualmente ou use o XML.", "err"); }
 }
+/* ---------- Biblioteca de NF-e e CT-e ---------- */
+let zipReady = null;
+function loadZip() { if (!zipReady) { zipReady = loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js").then(() => window.JSZip); zipReady.catch(() => (zipReady = null)); } return zipReady; }
+async function expandirArquivos(files) {
+  const out = [];
+  for (const f of files) {
+    if (/\.zip$/i.test(f.name) || f.type.includes("zip")) {
+      const Z = await loadZip(); const z = await Z.loadAsync(await f.arrayBuffer());
+      for (const nome of Object.keys(z.files)) if (/\.xml$/i.test(nome) && !z.files[nome].dir) out.push({ name: nome.split("/").pop(), text: await z.files[nome].async("string") });
+    } else if (/\.xml$/i.test(f.name) || f.type.includes("xml")) out.push({ name: f.name, text: await f.text() });
+    else out.push({ name: f.name, file: f });
+  }
+  return out;
+}
+function resumoNFe(x) {
+  const t = [x.observacao, x.enderecoEntrega, x.obsCont || ""].join(" ");
+  const km = (String(t).toUpperCase().replace(/\s/g, "").match(/KM(\d{1,3})\+(\d{3})/) || [])[0];
+  return { chave: x.chave, numero: String(Number(x.numero) || x.numero || ""), data: x.data, emitente: x.fornecedor, destinatario: x.destNome || "", natOp: x.natOp || "",
+    itens: (x.itens || []).slice(0, 60), pesoKg: x.pesoKg || null, valor: parseNum(x.valor) || 0, infCpl: String(x.observacao || "").slice(0, 1500), km: km ? km.replace("KM", "") : "", salvoEm: Date.now() };
+}
+async function guardarNFes(lista) {
+  if (!db || !lista.length) return 0;
+  let n = 0;
+  const run = async () => { for (const r of lista) { if (!r.chave) continue; try { await db.collection("notas").doc(r.chave).set(r); n++; } catch (e) { console.error(e); } } };
+  if (db.lote) await db.lote(run); else await run();
+  return n;
+}
+const fmtQtd = (i) => `${nf.format(i.q)} ${String(i.u || "").toUpperCase()}`;
+function matQtdDeItens(itens, texto) {
+  const soma = { VIGA: 0, "PRÉ-LAJE": 0 };
+  for (const i of itens || []) { const m = matDe(i.x); if (m) soma[m] += Number(i.q) || 0; }
+  if (soma.VIGA || soma["PRÉ-LAJE"]) { const mat = soma.VIGA >= soma["PRÉ-LAJE"] ? "VIGA" : "PRÉ-LAJE"; return { mat, qtd: soma[mat] }; }
+  return { mat: matDe(texto) || "OUTRO", qtd: 0 };
+}
+function materialDeNFes(nfes) {
+  const itens = nfes.flatMap((n) => n.itens || []);
+  if (!itens.length) return "";
+  const g = new Map();
+  for (const i of itens) { const k = (i.x || "").trim() + "|" + (i.u || ""); const a = g.get(k) || { x: (i.x || "").trim(), u: i.u, q: 0 }; a.q += Number(i.q) || 0; g.set(k, a); }
+  const arr = [...g.values()];
+  return arr.slice(0, 6).map((i) => `${i.x} (${fmtQtd(i)})`).join(" + ") + (arr.length > 6 ? ` (+${arr.length - 6} itens)` : "");
+}
+function applyFrete(cte, nfesExtras) {
+  importMeta = "xml";
+  if (curCat !== "frete") setCat("frete");
+  const ok = [], falta = [];
+  $("#lDoc").value = "CT-e";
+  if (cte.numero) { $("#lNum").value = String(Number(cte.numero) || cte.numero); ok.push("CT-e " + $("#lNum").value); }
+  if (cte.data) $("#lData").value = cte.data;
+  if (cte.chave) $("#lChave").value = cte.chave;
+  if (cte.fornecedor) $("#lFornec").value = cte.fornecedor;
+  if (cte.valor) { $("#lValor").value = fmtIn(Math.round(parseNum(cte.valor) * 100) / 100); ok.push("valor " + money(parseNum(cte.valor))); }
+  if (cte.origem) $("#lOrig").value = cte.origem; if (cte.destino) $("#lDest").value = cte.destino;
+  const chaves = cte.chavesNFe || [];
+  const mapa = new Map(notasNFe.map((n) => [n.chave, n])); (nfesExtras || []).forEach((n) => mapa.set(n.chave, n));
+  const achadas = chaves.map((c) => mapa.get(c)).filter(Boolean);
+  const faltam = chaves.filter((c) => !mapa.has(c));
+  const nums = chaves.map((c) => (mapa.get(c) || {}).numero || String(Number(c.slice(25, 34))));
+  $("#lNFsT").value = nums.join(", ");
+  const mat = materialDeNFes(achadas);
+  if (mat) $("#lDesc").value = mat; else if (cte.descricao) $("#lDesc").value = cte.descricao;
+  const mq = matQtdDeItens(achadas.flatMap((n) => n.itens || []), $("#lDesc").value);
+  $("#lMat").value = mq.mat; if (mq.qtd) $("#lQtd").value = fmtIn(mq.qtd);
+  ok.push(`${mq.qtd ? nf0.format(mq.qtd) + " " : ""}${MAT_TXT[mq.mat].toLowerCase()}${mq.qtd > 1 ? "s" : ""}`);
+  const peso = cte.pesoKg || achadas.reduce((a, n) => a + (Number(n.pesoKg) || 0), 0) || null;
+  if (peso) $("#lPeso").value = fmtIn(Math.round(peso * 100) / 100);
+  const texto = [cte.observacao, cte.xObs, cte.enderecoEntrega, cte.destino, ...achadas.map((n) => n.infCpl + " KM " + (n.km || ""))].join(" ");
+  const km = (texto.toUpperCase().replace(/\s/g, "").match(/KM(\d{1,3})\+(\d{3})/) || []);
+  const o = km.length ? obras.find((x) => kmDe(x.km || x.nome) === kmDe(km[1] + "+" + km[2])) : null;
+  if (o) { $("#lObra").value = o.id; ok.push(o.nome); } else { const g = guessObra(texto); if (g) { $("#lObra").value = g; ok.push(obraNome(g)); } else falta.push("obra"); }
+  const extra = [cte.origem || cte.destino ? `Rota: ${cte.origem || "?"} → ${cte.destino || "?"}` : "", cte.remetente && "Remetente: " + cte.remetente, cte.valorCarga ? "Valor da carga: " + money(cte.valorCarga) : "", cte.xObs].filter(Boolean).join(" | ");
+  if (extra) $("#lObs").value = extra.slice(0, 500);
+  $("#lancMsg").dataset.nfes = JSON.stringify(chaves.map((c) => { const n = mapa.get(c); return { chave: c, numero: n ? n.numero : String(Number(c.slice(25, 34))), emitente: n ? n.emitente : "", itens: n ? (n.itens || []).slice(0, 20) : [] }; }));
+  let m = `Preenchido: ${ok.join(", ")}.`;
+  if (chaves.length) m += ` O CT-e transporta ${chaves.length} NF-e: ${achadas.length} encontrada(s) na biblioteca.`;
+  if (faltam.length) m += ` Não encontrei ${faltam.length} NF-e (${faltam.slice(0, 5).map((c) => Number(c.slice(25, 34))).join(", ")}): suba o XML delas junto com o CT-e ou na Biblioteca de NF-e para puxar o material.`;
+  if (falta.length) m += " Confira/complete: " + falta.join(", ") + ".";
+  const dup = cte.chave && lancs.find((l) => l.chave === cte.chave);
+  if (dup) m += ` Atenção: esse CT-e já foi lançado em ${fmtDate(dup.data)}.`;
+  const esp = !dup && !editLanc && aguardandoCte(chaves);
+  if (esp) {
+    editLanc = esp; $("#mLancTitulo").textContent = "Completar frete aguardando CT-e"; $("#btnExcluirLanc").hidden = false;
+    if (!$("#lDesc").value && esp.descricao) $("#lDesc").value = esp.descricao;
+    if (!$("#lPeso").value && esp.pesoKg) $("#lPeso").value = fmtIn(esp.pesoKg);
+    if (esp.obraId && !$("#lObra").value) $("#lObra").value = esp.obraId;
+    m += ` Encontrei o lançamento que estava aguardando este CT-e (NF-e ${(esp.nfsTransp || []).map((x) => x.numero).join(", ")}): ao salvar, ele é completado.`;
+  }
+  setImp(m, faltam.length || falta.length || dup ? "warn" : "ok");
+  updPrecoHint();
+}
+function parseDanfeNFe(texto) {
+  const t = String(texto || "").replace(/\r/g, ""), U = t.toUpperCase(), F = U.replace(/\s+/g, " ");
+  const n = {};
+  const ch = U.replace(/[^\d\s]/g, " ").match(/(?:\d{4}\s{0,3}){10}\d{4}/); if (ch) { const c = onlyDigits(ch[0]); if (c.length === 44) n.chave = c; }
+  n.numero = n.chave ? String(Number(n.chave.slice(25, 34))) : ((F.match(/N[º°O]\s*[.,:]?\s*(\d{3}[.,]\d{3}[.,]\d{3})/) || [])[1] || "").replace(/\D/g, "").replace(/^0+/, "");
+  const d = F.match(/DATA DA EMISS[ÃA]O\s*:?\s*(\d{2})\/(\d{2})\/(\d{4})/) || F.match(/EMISS[ÃA]O\s*:\s*(\d{2})\/(\d{2})\/(\d{4})/) || F.match(/PROTOCOLO[^\d]{0,60}\d+\s*-?\s*(\d{2})\/(\d{2})\/(\d{4})/);
+  if (d && dataOk(d[1], d[2], d[3])) n.data = `${d[3]}-${d[2]}-${d[1]}`;
+  const em = t.match(/RECEBEMOS DE\s+(.+?)\s+OS PRODUTOS/i) || t.match(/IDENTIFICA[ÇC][ÃA]O DO EMITENTE\s*\n\s*([^\n]+)/i); if (em) n.emitente = em[1].trim();
+  const de = t.match(/DESTINAT[ÁA]RIO\s*\/\s*REMETENTE\s+NOME\s*\/\s*RAZ[ÃA]O SOCIAL\s+([^\n]+?)\s*(?:\n|CNPJ|\d{2}\.\d{3}\.\d{3})/i); if (de) n.destinatario = de[1].trim();
+  const no = t.match(/NATUREZA DA OPERA[ÇC][ÃA]O\s+([^\n]+?)\s*(?:\n|PROTOCOLO)/i); if (no) n.natOp = no[1].trim();
+  const tr = t.match(/TRANSPORTADOR\s*\/\s*VOLUMES TRANSPORTADOS\s+NOME\s*\/\s*RAZ[ÃA]O SOCIAL\s+([^\n]+?)\s*(?:\n|FRETE|\d\s*-\s*POR)/i); if (tr && !/^FRETE/i.test(tr[1])) n.transportadora = tr[1].trim();
+  const pl = F.match(/PLACA DO VE[ÍI]CULO\s+(?:\S+\s+){0,2}?([A-Z]{3}-?\d[A-Z0-9]\d{2})/); if (pl) n.placa = pl[1];
+  const ps = F.match(/PESO BRUTO\s+PESO L[ÍI]QUIDO\s+([\d.,]+)(?:\s+([\d.,]+))?/);
+  if (ps) { const a = parseNum(ps[1]), b = ps[2] && /\d/.test(ps[2]) ? parseNum(ps[2]) : null; n.pesoKg = b ? Math.max(a, b) : a; }
+  const ini = F.indexOf("DADOS DOS PRODUTOS"), fim = F.indexOf("DADOS ADICIONAIS", ini);
+  const sec = ini >= 0 ? F.slice(ini, fim > 0 ? fim : undefined) : "";
+  n.itens = [];
+  const re = /(?:^|\s)(\S*\d\S*)\s+([A-ZÀ-Ü0-9][^]*?)\s+(\d{8})\s+\d?\/?\d{2,3}\s+(\d{4})\s+([A-Z]{1,6}\d?)\s+([\d.]+,\d+)\s+([\d.]+,\d+)\s+([\d.]+,\d+)/g;
+  let m; while ((m = re.exec(sec))) n.itens.push({ x: m[2].trim(), q: parseNum(m[6]), u: m[5], v: parseNum(m[8]) });
+  const ic = F.match(/INFORMA[ÇC][ÕO]ES COMPLEMENTARES\s+([^]*?)(?:RESERVADO AO FISCO|VALOR APROXIMADO|IMPRESSO EM|$)/); n.infCpl = ic ? ic[1].trim().slice(0, 1500) : "";
+  const km = F.replace(/\s/g, "").match(/KM(\d{1,3})\+(\d{3})/); n.km = km ? `${km[1]}+${km[2]}` : "";
+  const vt = F.match(/V(?:ALOR|\.)\s*TOTAL DA NOTA\s+(?:[\d.,]+\s+){0,8}?([\d.]+,\d{2})\b/) || F.match(/VALOR TOTAL:\s*R\$\s*([\d.]+,\d{2})/); n.valor = vt ? parseNum(vt[1]) : 0;
+  n.salvoEm = Date.now(); n.origem = "pdf";
+  return n;
+}
+function parseDacte(texto) {
+  const F = String(texto || "").toUpperCase().replace(/\s+/g, " ");
+  const chaves = [...new Set((F.replace(/[^\d ]/g, " ").match(/(?:\d{4} ?){10}\d{4}/g) || []).map(onlyDigits).filter((c) => c.length === 44))];
+  const propria = chaves.find((c) => c.slice(20, 22) === "57") || "";
+  const c = { tipoDocumento: "CT-e", chave: propria, numero: propria ? String(Number(propria.slice(25, 34))) : "", chavesNFe: chaves.filter((x) => x !== propria && x.slice(20, 22) === "55") };
+  const d = F.match(/(?:DATA E HORA DE EMISS[ÃA]O|EMISS[ÃA]O)\s*:?\s*(\d{2})\/(\d{2})\/(\d{4})/); if (d && dataOk(d[1], d[2], d[3])) c.data = `${d[3]}-${d[2]}-${d[1]}`;
+  const v = F.match(/VALOR TOTAL DA PRESTA[ÇC][ÃA]O DO SERVI[ÇC]O\s+([\d.]+,\d{2})/) || F.match(/VALOR TOTAL DO SERVI[ÇC]O\s+([\d.]+,\d{2})/); if (v) c.valor = parseNum(v[1]);
+  const o = F.match(/IN[ÍI]CIO DA PRESTA[ÇC][ÃA]O\s+([A-ZÀ-Ü ]+?\s*-\s*[A-Z]{2})/); if (o) c.origem = o[1].replace(/\s*-\s*/, "/");
+  const t = F.match(/T[ÉE]RMINO DA PRESTA[ÇC][ÃA]O\s+([A-ZÀ-Ü ]+?\s*-\s*[A-Z]{2})/); if (t) c.destino = t[1].replace(/\s*-\s*/, "/");
+  const pp = F.match(/PRODUTO PREDOMINANTE\s+([^\d]{3,60}?)\s+(?:OUTRAS|VALOR|PESO)/); if (pp) c.descricao = pp[1].trim();
+  c.observacao = ""; return c;
+}
+function aguardandoCte(chavesNFe) {
+  return lancs.find((l) => l.categoria === "frete" && !l.numero && (l.nfsTransp || []).some((n) => n.chave && chavesNFe.includes(n.chave)));
+}
+async function freteDePdfTexto(text) {
+  const U = text.toUpperCase();
+  if (/DACTE|CONHECIMENTO DE TRANSPORTE/.test(U)) { const c = parseDacte(text); if (!c.chave && !c.chavesNFe.length) { setImp("Não consegui ler esse DACTE. Use o XML do CT-e.", "warn"); return; } applyFrete(c, []); return; }
+  const n = parseDanfeNFe(text);
+  if (!n.chave) { setImp("Não reconheci esse PDF como DANFE de NF-e nem DACTE de CT-e.", "err"); return; }
+  await guardarNFes([n]);
+  applyFreteDeNFe(n);
+}
+function applyFreteDeNFe(n) {
+  importMeta = "pdf";
+  if (curCat !== "frete") setCat("frete");
+  const ok = [], falta = [];
+  if (n.transportadora) { $("#lFornec").value = n.transportadora; ok.push("transportadora"); } else falta.push("transportadora");
+  if (n.data) $("#lData").value = n.data;
+  $("#lNFsT").value = n.numero; $("#lancMsg").dataset.nfes = JSON.stringify([{ chave: n.chave, numero: n.numero, emitente: n.emitente || "", itens: (n.itens || []).slice(0, 20) }]);
+  ok.push("NF-e " + n.numero);
+  const mat = materialDeNFes([n]); if (mat) $("#lDesc").value = mat;
+  const mq = matQtdDeItens(n.itens, mat); $("#lMat").value = mq.mat; if (mq.qtd) $("#lQtd").value = fmtIn(mq.qtd);
+  ok.push(`${mq.qtd ? nf0.format(mq.qtd) + " " : ""}${MAT_TXT[mq.mat].toLowerCase()}${mq.qtd > 1 ? "s" : ""}`);
+  if (n.pesoKg) $("#lPeso").value = fmtIn(n.pesoKg);
+  const o = n.km ? obras.find((x) => kmDe(x.km || x.nome) === kmDe(n.km)) : null;
+  if (o) { $("#lObra").value = o.id; ok.push(o.nome); } else falta.push(n.km ? `obra (KM ${n.km} não cadastrado)` : "obra");
+  $("#lDoc").value = "CT-e";
+  $("#lObs").value = [n.emitente && "Remetente: " + n.emitente, n.placa && "Placa " + n.placa, n.valor ? "Valor da carga: " + money(n.valor) : ""].filter(Boolean).join(" | ");
+  let m = `Preenchido pela NF-e: ${ok.join(", ")}.`;
+  if (falta.length) m += " Complete: " + falta.join(", ") + ".";
+  m += " Falta o CT-e: informe o número e o valor do frete, ou salve assim e, quando o CT-e chegar, anexe o XML/PDF dele: o sistema completa este mesmo lançamento.";
+  setImp(m, "warn");
+}
+async function importarVarios(files) {
+  try {
+    const itens = await expandirArquivos(files);
+    const xmls = itens.filter((i) => i.text);
+    const outros = itens.filter((i) => i.file);
+    if (!xmls.length && outros.length === 1) return importar(outros[0].file);
+    if (!xmls.length) { setImp("Selecione XMLs (CT-e e NF-e) ou um único PDF/foto.", "err"); return; }
+    const lidos = xmls.map((x) => ({ name: x.name, p: parseXmlNota(x.text) })).filter((x) => x.p);
+    const ctes = lidos.filter((x) => x.p.tipoDocumento === "CT-e");
+    const nfes = lidos.filter((x) => x.p.tipoDocumento === "NF-e").map((x) => resumoNFe(x.p));
+    if (nfes.length) { const n = await guardarNFes(nfes); if (!ctes.length) { setImp(`${n} NF-e guardada(s) na biblioteca.`, "ok"); if (nfes.length === 1 && lidos.length === 1) applyExtract(lidos[0].p, "xml"); return; } }
+    if (ctes.length > 1) { setImp(`Selecionei o primeiro CT-e (${ctes[0].name}). Para lançar vários CT-e, faça um de cada vez.`, "warn"); }
+    if (ctes.length) { applyFrete(ctes[0].p, nfes); return; }
+    if (lidos.length === 1) applyExtract(lidos[0].p, "xml");
+  } catch (e) { console.error(e); setImp("Não consegui ler esses arquivos.", "err"); }
+}
+function renderBiblio() {
+  const q = normTxt($("#biblioBusca").value || "");
+  const ls = notasNFe.filter((n) => !q || normTxt([n.numero, n.emitente, n.chave, (n.itens || []).map((i) => i.x).join(" ")].join(" ")).includes(q)).sort((a, b) => (b.data || "").localeCompare(a.data || "")).slice(0, 200);
+  const usadas = new Set(lancs.flatMap((l) => (l.nfsTransp || []).map((n) => n.chave)));
+  $("#tblBiblio").innerHTML = notasNFe.length ? `<thead><tr><th>NF-e</th><th>Emissão</th><th>Emitente</th><th>Material</th><th class="n">Peso</th><th>Situação</th></tr></thead><tbody>` +
+    ls.map((n) => `<tr><td class="num">${esc(n.numero)}</td><td class="num">${fmtDate(n.data)}</td><td class="trunc">${esc(n.emitente)}</td><td class="trunc">${esc(materialDeNFes([n]))}</td><td class="n">${n.pesoKg ? nf.format(n.pesoKg) + " kg" : "—"}</td><td>${usadas.has(n.chave) ? `<span class="pill ok">Em CT-e lançado</span>` : `<span class="pill none">Aguardando CT-e</span>`}</td></tr>`).join("") + `</tbody>`
+    : `<tbody><tr><td class="empty">Nenhuma NF-e na biblioteca ainda.</td></tr></tbody>`;
+  $("#biblioStatus").textContent = $("#biblioStatus").dataset.msg || `${notasNFe.length} NF-e guardada(s).`;
+}
+$("#btnBiblio").onclick = () => { $("#biblioStatus").dataset.msg = ""; renderBiblio(); openModal("mBiblio"); };
+$("#biblioBusca").oninput = renderBiblio;
+async function subirBiblio(files) {
+  const st = $("#biblioStatus"); st.className = "status"; st.dataset.msg = "Lendo arquivos…"; st.textContent = st.dataset.msg;
+  try {
+    const itens = await expandirArquivos(files);
+    const nfes = itens.filter((i) => i.text).map((i) => parseXmlNota(i.text)).filter((p) => p && p.tipoDocumento === "NF-e").map(resumoNFe);
+    const pdfs = itens.filter((i) => i.file && /\.pdf$|^image\//i.test(i.file.name + "|" + i.file.type));
+    for (let k = 0; k < pdfs.length; k++) {
+      st.textContent = `Lendo PDF ${k + 1} de ${pdfs.length}…`;
+      try { const r = await textoDoArquivo(pdfs[k].file); const n = parseDanfeNFe(r.text || await ocrImagem(r.canvas)); if (n.chave) nfes.push(n); } catch (e) { console.error(e); }
+    }
+    const n = await guardarNFes(nfes);
+    st.className = "status ok"; st.dataset.msg = `${n} NF-e guardada(s)${itens.length - nfes.length ? `; ${itens.length - nfes.length} arquivo(s) ignorado(s) (não são NF-e)` : ""}.`;
+  } catch (e) { console.error(e); st.className = "status err"; st.dataset.msg = "Não consegui ler esses arquivos."; }
+  renderBiblio();
+}
+$("#fileBiblio").addEventListener("change", (e) => { if (e.target.files.length) subirBiblio([...e.target.files]); e.target.value = ""; });
+const dropB = $("#dropBiblio");
+["dragenter", "dragover"].forEach((ev) => dropB.addEventListener(ev, (e) => { e.preventDefault(); dropB.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => dropB.addEventListener(ev, (e) => { e.preventDefault(); dropB.classList.remove("over"); }));
+dropB.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) subirBiblio([...e.dataTransfer.files]); });
+
 async function importar(file) {
   const name = file.name.toLowerCase();
   try {
@@ -1471,7 +1711,11 @@ function parseXmlNota(text) {
       quantidade: 1,
       origem: [v(ide, "xMunIni"), v(ide, "UFIni")].filter(Boolean).join("/"),
       destino: [v(ide, "xMunFim"), v(ide, "UFFim")].filter(Boolean).join("/"),
-      observacao: obs + (nfs.length ? ` | NF-e transportadas: ${nfs.length}` : ""),
+      observacao: obs,
+      chavesNFe: [...new Set(nfs.map((c) => c.replace(/\D/g, "")).filter((c) => c.length === 44))],
+      pesoKg: (() => { const qs = all(cte, "infQ").map((q) => ({ u: v(q, "cUnid"), t: v(q, "tpMed").toUpperCase(), q: parseFloat(v(q, "qCarga")) || 0 })); const k = qs.find((q) => q.u === "01" && /BRUTO|REAL/.test(q.t)) || qs.find((q) => q.u === "01") || qs.find((q) => q.u === "02"); return k ? (k.u === "02" ? k.q * 1000 : k.q) : null; })(),
+      valorCarga: parseFloat(v(carga, "vCarga")) || null,
+      remetente: rem ? v(rem, "xNome") : "", destinatario: dest ? v(dest, "xNome") : "", xObs: v(one(cte, "compl"), "xObs"),
       enderecoEntrega: dest ? [v(dest, "xLgr"), v(dest, "xCpl"), v(dest, "xBairro")].join(" ") : "",
     };
   }
@@ -1499,6 +1743,9 @@ function parseXmlNota(text) {
       descricao: prods.slice(0, 3).map((p) => p.x).join(" + ") + (prods.length > 3 ? ` (+${prods.length - 3} itens)` : ""),
       quantidade: ok && qtd ? qtd : (cat === "frete" ? 1 : (prods.length === 1 ? prods[0].q : 0)),
       observacao: [natOp, v(one(nfe, "infAdic"), "infCpl")].filter(Boolean).join(" | "),
+      itens: prods.map((p) => ({ x: p.x, q: p.q, u: p.u, v: p.vp })),
+      pesoKg: (() => { const vs = all(one(nfe, "transp"), "vol"); const b = vs.reduce((a, x) => a + (parseFloat(v(x, "pesoB")) || 0), 0), l2 = vs.reduce((a, x) => a + (parseFloat(v(x, "pesoL")) || 0), 0); return b || l2 || null; })(),
+      destNome: dest ? v(dest, "xNome") : "", natOp,
       obsCont: all(nfe, "obsCont").map((o) => (o.getAttribute("xCampo") || "") + ": " + v(o, "xTexto")).join("\n"),
       enderecoEntrega: [entrega && [v(entrega, "xLgr"), v(entrega, "xCpl"), v(entrega, "xBairro")].join(" "), dest && [v(dest, "xLgr"), v(dest, "xCpl")].join(" ")].filter(Boolean).join(" "),
     };
@@ -1535,11 +1782,20 @@ async function importarPdf(file) {
   for (let i = 1; i <= Math.min(pdf.numPages, 4); i++) {
     const page = await pdf.getPage(i);
     const c = await page.getTextContent();
-    text += c.items.map((it) => it.str).join(" ") + "\n";
+    text += c.items.map((it) => it.str + (it.hasEOL ? "\n" : " ")).join("") + "\n";
   }
   text = text.replace(/[ \t]+/g, " ").trim();
-  const ehConc = curCat === "concreto" || pareceConcreto(text);
+  if (curCat === "frete" && text.length > 150) { await freteDePdfTexto(text); return; }
+  const ehConc = curCat === "concreto" || (curCat !== "frete" && pareceConcreto(text));
   if (text.length > 150 && ehConc) { applyConcreto(parseNotaConcreto(text), "pdf"); return; }
+  if (text.length <= 150 && curCat === "frete") {
+    setImp("PDF escaneado: lendo o texto da imagem…");
+    const page = await pdf.getPage(1); const vp = page.getViewport({ scale: 3 });
+    const cv = document.createElement("canvas"); cv.width = vp.width; cv.height = vp.height;
+    await page.render({ canvasContext: cv.getContext("2d"), viewport: vp }).promise;
+    try { await freteDePdfTexto(await ocrImagem(cv)); } catch { setImp("Não consegui ler a imagem da nota. Preencha manualmente.", "err"); }
+    return;
+  }
   if (text.length <= 150 && (curCat === "concreto" || !sample)) {
     const page = await pdf.getPage(1);
     const vp = page.getViewport({ scale: 3 });
@@ -1648,7 +1904,7 @@ async function textoDoArquivo(file, precisaImagem) {
     const lib = await loadPdfJs();
     const pdf = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
     let text = "";
-    for (let i = 1; i <= Math.min(pdf.numPages, 3); i++) { const c = await (await pdf.getPage(i)).getTextContent(); text += c.items.map((it) => it.str).join(" ") + "\n"; }
+    for (let i = 1; i <= Math.min(pdf.numPages, 3); i++) { const c = await (await pdf.getPage(i)).getTextContent(); text += c.items.map((it) => it.str + (it.hasEOL ? "\n" : " ")).join("") + "\n"; }
     if (text.replace(/\s/g, "").length > 150) return { text };
     const page = await pdf.getPage(1); const vp = page.getViewport({ scale: 3 });
     const cv = document.createElement("canvas"); cv.width = vp.width; cv.height = vp.height;
@@ -2383,6 +2639,7 @@ function conectar(banco) {
     renderAll();
   }, onErr);
   db.doc("config/reidi").onSnapshot((snap) => { reidi = snap.exists ? (snap.data().fornecedores || {}) : {}; renderAll(); }, () => {});
+  db.collection("notas").onSnapshot((snap) => { notasNFe = snap.docs.map((d) => ({ id: d.id, ...d.data() })); if (!$("#mBiblio").hidden) renderBiblio(); }, () => {});
   db.collection("precos").onSnapshot((snap) => {
     precos = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderAll();
