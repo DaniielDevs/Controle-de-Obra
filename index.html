@@ -171,6 +171,14 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
 .subsec h3 { font-size: 14px; }
 .ens { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: end; }
 .ens > span { font-size: 13px; font-weight: 600; color: var(--muted); }
+.adic { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 10px; align-items: end; }
+.adic > span { font-size: 13px; font-weight: 600; color: var(--muted); padding-bottom: 10px; }
+.vtab { width: 100%; border-collapse: collapse; font-size: 14px; }
+.vtab th, .vtab td { padding: 6px 8px; border-bottom: 1px solid var(--line); background: transparent; }
+.vtab td.n input { width: 110px; text-align: right; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.vtab tfoot td { font-weight: 700; font-size: 15px; border-bottom: 0; }
+.vtab tr.off td { color: var(--muted); }
+.subsec .grid3 { gap: 10px; }
 @media (max-width: 640px) { .ens { grid-template-columns: 1fr 1fr; } }
 .drop { border: 2px dashed var(--line); border-radius: 10px; padding: 16px; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: var(--surface-2); }
 .drop.over { border-color: var(--accent); }
@@ -324,10 +332,15 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
       <div class="grid3">
         <div class="field span2"><label for="lObra">Obra *</label><select id="lObra" required></select></div>
         <div class="field"><label for="lData" id="lDataLabel">Data *</label><input id="lData" type="date" required></div>
-        <div class="field"><label for="lDoc">Documento</label>
+
+        <div class="field"><label for="lFornec" id="lFornecLabel">Fornecedor</label><input id="lFornec" autocomplete="off" list="fornLancList"></div>
+        <datalist id="fornLancList"></datalist>
+        <div class="field" data-only="concreto"><label for="lRemessa">Simples remessa</label><input id="lRemessa" inputmode="numeric" autocomplete="off"></div>
+        <div class="field" data-only="concreto"><label for="lDataNF">Data da NF</label><input id="lDataNF" type="date"></div>
+        <div class="field" data-only="frete aco"><label for="lDoc">Documento</label>
           <select id="lDoc"><option>NF-e</option><option>CT-e</option><option>NF remessa</option><option>Recibo</option><option>Outro</option></select></div>
-        <div class="field"><label for="lNum" id="lNumLabel">Número</label><input id="lNum" inputmode="numeric" autocomplete="off"></div>
-        <div class="field"><label for="lFornec" id="lFornecLabel">Fornecedor</label><input id="lFornec" autocomplete="off"></div>
+        <div class="field span2" data-only="concreto aco"><label for="lPeca" id="lPecaLabel">Aplicação</label><input id="lPeca" autocomplete="off" placeholder="Ex.: Sapata Ap. 07, Travessa Ap. 05, Laje"></div>
+        <div class="field"><label for="lNum" id="lNumLabel">Número da NF</label><input id="lNum" inputmode="numeric" autocomplete="off"></div>
         <div class="field span3"><label for="lChave">Chave de acesso (44 dígitos)</label><input id="lChave" class="mono" inputmode="numeric" autocomplete="off" maxlength="60"></div>
 
         <!-- FRETE -->
@@ -336,27 +349,68 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
         <div class="field" data-only="frete"><label for="lOrig">Origem</label><input id="lOrig" autocomplete="off"></div>
         <div class="field span2" data-only="frete"><label for="lDest">Destino</label><input id="lDest" autocomplete="off"></div>
 
-        <!-- CONCRETO e AÇO -->
-        <div class="field" data-only="concreto"><label for="lRemessa">Nº da remessa</label><input id="lRemessa" inputmode="numeric" autocomplete="off"></div>
-        <div class="field" data-only="concreto"><label for="lTracoCod">Código do traço</label><input id="lTracoCod" autocomplete="off" placeholder="Ex.: C30.B01"></div>
-        <div class="field" data-only="concreto"><label for="lDataNF">Data da NF</label><input id="lDataNF" type="date"></div>
-        <div class="field span3" data-only="concreto aco"><label for="lPeca">Peça concretada / aplicação</label><input id="lPeca" autocomplete="off" placeholder="Ex.: Sapata Ap. 07, Travessa Ap. 05, Laje"></div>
-        <div class="field" data-only="concreto"><label for="lFckP">fck de projeto (MPa)</label><input id="lFckP" inputmode="decimal" autocomplete="off" list="fckList"></div>
-        <div class="field" data-only="concreto"><label for="lFckA">fck aplicado – NF (MPa)</label><input id="lFckA" inputmode="decimal" autocomplete="off" list="fckList"></div>
-        <datalist id="fckList"><option value="10"><option value="15"><option value="20"><option value="25"><option value="30"><option value="35"><option value="40"><option value="45"><option value="50"></datalist>
-        <div class="field span2" data-only="concreto"><label for="lTraco">Traço contratado</label><select id="lTraco"></select></div>
-        <div class="field" data-only="concreto"><label for="lBomba">Bombeamento</label><select id="lBomba"><option value="">Sem bomba</option><option value="mangote">Bomba mangote</option><option value="lanca">Bomba lança</option></select></div>
+        <!-- AÇO -->
         <div class="field" data-only="aco"><label for="lTipoAco">Tipo</label><select id="lTipoAco"><option>CA-50</option><option>CA-60</option><option>Tela soldada</option><option>Arame recozido</option><option>Outro</option></select></div>
         <div class="field" data-only="aco"><label for="lBitola">Bitola (mm)</label><input id="lBitola" inputmode="decimal" autocomplete="off" list="bitolaList"></div>
         <datalist id="bitolaList"><option value="5.0"><option value="6.3"><option value="8.0"><option value="10.0"><option value="12.5"><option value="16.0"><option value="20.0"><option value="25.0"><option value="32.0"></datalist>
 
-        <div class="field"><label for="lQtd" id="lQtdLabel">Quantidade</label><input id="lQtd" inputmode="decimal" autocomplete="off"></div>
-        <div class="field"><label for="lValor" id="lValorLabel">Valor (R$)</label><input id="lValor" inputmode="decimal" autocomplete="off"></div>
-        <div class="span3" id="precoHint" hidden style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px;padding:8px 12px;border-radius:8px;background:var(--surface-2);border:1px solid var(--line)"><span id="precoHintTxt"></span><button class="btn small" type="button" id="btnUsarPreco">Usar este valor</button></div>
+        <!-- FRETE e AÇO: quantidade e valor -->
+        <div class="field" data-only="frete aco"><label for="lQtd" id="lQtdLabel">Quantidade</label><input id="lQtd" inputmode="decimal" autocomplete="off"></div>
+        <div class="field" data-only="frete aco"><label for="lValor" id="lValorLabel">Valor (R$)</label><input id="lValor" inputmode="decimal" autocomplete="off"></div>
+        <div class="span3" id="precoHint" data-only="frete aco" hidden style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px;padding:8px 12px;border-radius:8px;background:var(--surface-2);border:1px solid var(--line)"><span id="precoHintTxt"></span><button class="btn small" type="button" id="btnUsarPreco">Usar este valor</button></div>
+
+        <!-- CONCRETO: tipo e quantidade -->
+        <div class="subsec" data-only="concreto">
+          <h3>Concreto</h3>
+          <div class="grid3">
+            <div class="field span2"><label for="lTraco">Tipo do concreto (contrato)</label><select id="lTraco"></select></div>
+            <div class="field"><label for="lFckP">FCK (MPa)</label><input id="lFckP" inputmode="decimal" autocomplete="off" list="fckList"></div>
+            <datalist id="fckList"><option value="10"><option value="15"><option value="20"><option value="25"><option value="30"><option value="35"><option value="40"><option value="45"><option value="50"></datalist>
+            <div class="field"><label for="lTracoCod">Traço</label><input id="lTracoCod" autocomplete="off" placeholder="Ex.: C30.B01"></div>
+            <div class="field"><label for="cM3" id="cM3Label">Quant. realizada (m³) *</label><input id="cM3" inputmode="decimal" autocomplete="off"></div>
+          </div>
+        </div>
+
+        <!-- CONCRETO: adicionais -->
+        <div class="subsec" data-only="concreto">
+          <h3>Adicionais <span class="muted" style="font-weight:400">(se tiver)</span></h3>
+          <div class="adic">
+            <span></span><span style="padding:0">Quantidade</span><span style="padding:0">Nº da NF</span>
+            <span>M³ faltante</span>
+            <div class="field"><input id="cFaltQ" inputmode="decimal" autocomplete="off" aria-label="M³ faltante – quantidade"></div>
+            <div class="field"><input id="cFaltNF" autocomplete="off" aria-label="M³ faltante – NF"></div>
+            <span>Adicional HE (mult.)</span>
+            <div class="field"><input id="cHeQ" inputmode="decimal" autocomplete="off" aria-label="Adicional HE – quantidade"></div>
+            <div class="field"><input id="cHeNF" autocomplete="off" aria-label="Adicional HE – NF"></div>
+            <span>Adicional permanência (h)</span>
+            <div class="field"><input id="cPermQ" inputmode="decimal" autocomplete="off" aria-label="Permanência – horas"></div>
+            <div class="field"><input id="cPermNF" autocomplete="off" aria-label="Permanência – NF"></div>
+            <span>Devolução (m³)</span>
+            <div class="field"><input id="cDevQ" inputmode="decimal" autocomplete="off" aria-label="Devolução – quantidade"></div>
+            <div class="field"><input id="cDevNF" autocomplete="off" aria-label="Devolução – NF"></div>
+          </div>
+        </div>
+
+        <!-- CONCRETO: valores -->
+        <div class="subsec" data-only="concreto">
+          <h3>Valores</h3>
+          <div class="tbl-wrap"><table class="vtab">
+            <thead><tr><th></th><th class="n">Quant.</th><th class="n">Unitário (R$)</th><th class="n">Total</th></tr></thead>
+            <tbody>
+              <tr data-v="conc"><td id="vConcLbl">Concreto</td><td class="n" id="vConcQ"></td><td class="n"><input id="uConc" inputmode="decimal" autocomplete="off" aria-label="Unitário do concreto"></td><td class="n" id="vConcT"></td></tr>
+              <tr data-v="falt"><td>M³ faltante</td><td class="n" id="vFaltQ"></td><td class="n"><input id="uFalt" inputmode="decimal" autocomplete="off" aria-label="Unitário m³ faltante"></td><td class="n" id="vFaltT"></td></tr>
+              <tr data-v="he"><td>Adicional de horas extras</td><td class="n" id="vHeQ"></td><td class="n"><input id="uHe" inputmode="decimal" autocomplete="off" aria-label="Unitário HE"></td><td class="n" id="vHeT"></td></tr>
+              <tr data-v="perm"><td>Adicional de permanência</td><td class="n" id="vPermQ"></td><td class="n"><input id="uPerm" inputmode="decimal" autocomplete="off" aria-label="Unitário permanência"></td><td class="n" id="vPermT"></td></tr>
+              <tr data-v="dev"><td>Adicional de devolução</td><td class="n" id="vDevQ"></td><td class="n"><input id="uDev" inputmode="decimal" autocomplete="off" aria-label="Unitário devolução"></td><td class="n" id="vDevT"></td></tr>
+            </tbody>
+            <tfoot><tr><td colspan="3">Valor total faturado</td><td class="n" id="vTotal">R$ 0,00</td></tr></tfoot>
+          </table></div>
+          <p class="hint" id="vInfo"></p>
+        </div>
 
         <!-- ENSAIOS (concreto) -->
         <div class="subsec" data-only="concreto">
-          <h3>Ensaios de compressão (MPa)</h3>
+          <h3>Ensaios – rompimentos (MPa)</h3>
           <div class="ens">
             <span>7 dias</span>
             <div class="field"><label for="e7a">CP1</label><input id="e7a" inputmode="decimal" autocomplete="off"></div>
@@ -425,7 +479,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
       <div class="grid2">
         <div class="field span2"><label for="pForn" id="pFornLabel">Fornecedor</label><input id="pForn" autocomplete="off" list="fornList"></div>
         <datalist id="fornList"></datalist>
-        <div class="field" data-ponly="concreto"><label for="pServ">Item</label><select id="pServ"><option value="">Concreto (por fck)</option><option value="bomba-mangote">Taxa de bomba – mangote (por m³)</option><option value="bomba-lanca">Taxa de bomba – lança (por m³)</option><option value="minimo">Taxa mínima / verba</option><option value="outro">Outro serviço</option></select></div>
+        <div class="field" data-ponly="concreto"><label for="pServ">Item</label><select id="pServ"><option value="">Concreto (por fck)</option><option value="bomba-mangote">Taxa de bomba – mangote (por m³)</option><option value="bomba-lanca">Taxa de bomba – lança (por m³)</option><option value="minimo">Adicional volume mínimo de bomba (por m³)</option><option value="m3-faltante">M³ faltante (por m³)</option><option value="permanencia">Adicional de permanência (por hora)</option><option value="devolucao">Adicional de devolução (por m³)</option><option value="outro">Outro serviço</option></select></div>
         <div class="field" data-ponly="concreto"><label for="pFck">fck (MPa)</label><input id="pFck" inputmode="decimal" list="fckList" autocomplete="off"></div>
         <div class="field" data-ponly="aco"><label for="pTipo">Tipo</label><select id="pTipo"><option value="">Todos</option><option>CA-50</option><option>CA-60</option><option>Tela soldada</option><option>Arame recozido</option><option>Outro</option></select></div>
         <div class="field" data-ponly="aco"><label for="pBitola">Bitola (mm)</label><input id="pBitola" inputmode="decimal" list="bitolaList" autocomplete="off" placeholder="vazio = todas"></div>
@@ -827,8 +881,8 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") $$(".overl
 /* ---------- Lançamento: formulário ---------- */
 let editLanc = null, curCat = "frete", importMeta = null;
 const FORM_TXT = {
-  frete: { forn: "Transportadora", qtd: "Viagens", num: "Número do CT-e / NF", data: "Data", valor: "Valor do frete (R$) *" },
-  concreto: { forn: "Concreteira", qtd: "Volume (m³)", num: "Nº da NF", data: "Data da concretagem *", valor: "Valor faturado (R$)" },
+  frete: { forn: "Transportadora", qtd: "Viagens", num: "Número do CT-e / NF", data: "Data *", valor: "Valor do frete (R$) *" },
+  concreto: { forn: "Concreteira *", qtd: "", num: "Número da NF", data: "Data da concretagem *", valor: "" },
   aco: { forn: "Fornecedor do aço", qtd: "Peso (kg)", num: "Número da NF", data: "Data *", valor: "Valor (R$)" },
 };
 function setCat(cat) {
@@ -836,55 +890,104 @@ function setCat(cat) {
   $$("#segCat button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.cat === curCat)));
   $$("#formLanc [data-only]").forEach((el) => (el.hidden = !el.dataset.only.split(" ").includes(curCat)));
   const t = FORM_TXT[curCat];
-  $("#lFornecLabel").textContent = t.forn; $("#lQtdLabel").textContent = t.qtd; $("#lNumLabel").textContent = t.num;
-  $("#lDataLabel").textContent = curCat === "frete" ? "Data *" : t.data; $("#lValorLabel").textContent = t.valor;
+  $("#lFornecLabel").textContent = t.forn; $("#lNumLabel").textContent = t.num; $("#lDataLabel").textContent = t.data;
+  if (t.qtd) $("#lQtdLabel").textContent = t.qtd; if (t.valor) $("#lValorLabel").textContent = t.valor;
+  $("#lPecaLabel").textContent = curCat === "aco" ? "Peça / aplicação" : "Aplicação";
+  const forns = [...new Set(precos.filter((p) => p.categoria === curCat).map((p) => p.fornecedor).concat(lancs.filter((l) => l.categoria === curCat).map((l) => l.fornecedor)).filter(Boolean))];
+  $("#fornLancList").innerHTML = forns.map((f) => `<option value="${esc(f)}">`).join("");
   if (!editLanc) $("#mLancTitulo").textContent = "Novo lançamento · " + CATS[curCat].nome;
   updEns();
 }
-$$("#segCat button").forEach((b) => (b.onclick = () => setCat(b.dataset.cat)));
+$$("#segCat button").forEach((b) => (b.onclick = () => { setCat(b.dataset.cat); if (curCat === "concreto") { fillTraco(); updConcreto(); } else updPrecoHint(); }));
+const numOrNull = (id) => ($("#" + id).value.trim() ? parseNum($("#" + id).value) : null);
 function formLancLike() {
-  return { categoria: curCat, fornecedor: $("#lFornec").value, data: $("#lData").value, qtd: parseNum($("#lQtd").value), km: parseNum($("#lKm").value),
-    fckProjeto: $("#lFckP").value ? parseNum($("#lFckP").value) : null, fckAplicado: $("#lFckA").value ? parseNum($("#lFckA").value) : null,
-    tipoAco: $("#lTipoAco").value, bitola: $("#lBitola").value ? parseNum($("#lBitola").value) : null,
-    precoId: curCat === "concreto" ? $("#lTraco").value || null : null, bomba: curCat === "concreto" ? $("#lBomba").value : "" };
+  const base = { categoria: curCat, fornecedor: $("#lFornec").value, data: $("#lData").value, km: parseNum($("#lKm").value),
+    fckProjeto: numOrNull("lFckP"), tipoAco: $("#lTipoAco").value, bitola: numOrNull("lBitola") };
+  if (curCat !== "concreto") return { ...base, qtd: parseNum($("#lQtd").value), precoId: null };
+  const p = precos.find((x) => x.id === $("#lTraco").value) || null;
+  const m3 = parseNum($("#cM3").value);
+  const um = {};
+  [["conc", "uConc"], ["falt", "uFalt"], ["he", "uHe"], ["perm", "uPerm"], ["dev", "uDev"]].forEach(([k, id]) => { if ($("#" + id).dataset.manual === "1" && $("#" + id).value.trim()) um[k] = parseNum($("#" + id).value); });
+  return { ...base, precoId: p ? p.id : null, servico: p && p.servico ? p.servico : "", qtd: p && p.servico ? 0 : m3, m3Bombeado: p && p.servico ? m3 : 0,
+    extras: { m3Faltante: numOrNull("cFaltQ"), nfFaltante: $("#cFaltNF").value.trim(), he: numOrNull("cHeQ"), heNF: $("#cHeNF").value.trim(),
+      permanenciaH: numOrNull("cPermQ"), permanenciaNF: $("#cPermNF").value.trim(), devolucaoM3: numOrNull("cDevQ"), devolucaoNF: $("#cDevNF").value.trim() },
+    unitManual: um };
+}
+function tiposConcreto(forn) {
+  return precos.filter((p) => p.categoria === "concreto" && (!forn || !p.fornecedor || fornIgual(p.fornecedor, forn)) && (!p.servico || ["bomba-mangote", "bomba-lanca", "minimo"].includes(p.servico)))
+    .sort((a, b) => (a.servico ? 1 : 0) - (b.servico ? 1 : 0) || (Number(a.fck) || 0) - (Number(b.fck) || 0) || (a.descricao || "").localeCompare(b.descricao || ""));
 }
 function fillTraco(sel) {
   const el = $("#lTraco"), cur = sel !== undefined ? sel : el.value;
-  const l = formLancLike(); l.precoId = null;
-  const cands = tracosPara(l);
-  el.innerHTML = `<option value="">${cands.length ? "Escolha o traço do contrato" : "Nenhum preço cadastrado para essa concreteira e fck"}</option>` +
-    cands.map((p) => { const v = vigente(p, l.data) || atual(p); return `<option value="${esc(p.id)}">${esc(p.descricao || "fck " + nf.format(p.fck))} — ${v ? money(v.valor) + "/m³" : "sem preço"}</option>`; }).join("");
-  if (cur && cands.some((p) => p.id === cur)) el.value = cur;
-  else if (cands.length === 1) el.value = cands[0].id;
-  else { const pad = cands.filter((p) => p.padrao); el.value = pad.length === 1 ? pad[0].id : ""; }
+  const forn = $("#lFornec").value.trim(), data = $("#lData").value;
+  const lista = tiposConcreto(forn);
+  const fck = numOrNull("lFckP");
+  const opt = (p) => { const v = vigente(p, data) || atual(p); const nome = p.servico ? (SERV_TXT[p.servico] || "Serviço") : "FCK " + nf.format(p.fck) + (p.descricao ? " · " + p.descricao.replace(/^Item [\d.]+ · /, "") : ""); return `<option value="${esc(p.id)}">${esc(nome)}${forn ? "" : " (" + esc(p.fornecedor) + ")"} — ${v ? money(v.valor) + "/" + (UNID[p.unidade] || p.unidade) : "sem preço"}</option>`; };
+  const conc = lista.filter((p) => !p.servico), serv = lista.filter((p) => p.servico);
+  el.innerHTML = `<option value="">${lista.length ? "Escolha o tipo do concreto" : forn ? "Nenhum preço cadastrado para essa concreteira" : "Informe a concreteira"}</option>` +
+    (conc.length ? `<optgroup label="Concreto">${conc.map(opt).join("")}</optgroup>` : "") + (serv.length ? `<optgroup label="Bombeamento (serviço)">${serv.map(opt).join("")}</optgroup>` : "");
+  if (cur && lista.some((p) => p.id === cur)) el.value = cur;
+  else if (fck != null) { const m = conc.filter((p) => Number(p.fck) === fck); el.value = m.length === 1 ? m[0].id : ""; }
+  else el.value = "";
 }
+function setUnit(id, v) { const el = $("#" + id); if (el.dataset.manual === "1") return; el.value = v == null ? "" : fmtIn(Math.round(v * 100) / 100); }
+function updConcreto() {
+  if (curCat !== "concreto") return;
+  const l = formLancLike();
+  const p = precos.find((x) => x.id === l.precoId) || null;
+  const bomba = !!(p && p.servico);
+  $("#cM3Label").textContent = bomba ? "M³ bombeados *" : "Quant. realizada (m³) *";
+  $("#vConcLbl").textContent = bomba ? (SERV_TXT[p.servico] || "Bombeamento") : "Concreto";
+  const c = calcConcreto(l);
+  setUnit("uConc", c.u.conc); setUnit("uFalt", c.u.falt); setUnit("uHe", c.u.he); setUnit("uPerm", c.u.perm); setUnit("uDev", c.u.dev);
+  const c2 = calcConcreto(formLancLike());
+  const linhas = { conc: ["vConcQ", "vConcT"], falt: ["vFaltQ", "vFaltT"], he: ["vHeQ", "vHeT"], perm: ["vPermQ", "vPermT"], dev: ["vDevQ", "vDevT"] };
+  for (const [k, [q, t]] of Object.entries(linhas)) {
+    const ln = c2.linhas[k];
+    $("#" + q).textContent = ln.q ? nf.format(ln.q) + (k === "perm" ? " h" : k === "he" ? "×" : " m³") : "—";
+    $("#" + t).textContent = ln.q ? money(ln.total) : "—";
+    $("#" + q).closest("tr").classList.toggle("off", !ln.q);
+  }
+  $("#vTotal").textContent = money(c2.total);
+  const info = [];
+  if (c2.vig) info.push(`Preço do contrato ${money(c2.vig.valor)}/${UNID[c2.preco.unidade] || "m³"} desde ${fmtDate(c2.vig.inicio)}` + (c2.pct ? `, com REIDI ${nf.format(c2.pct)}% = ${money(c2.u.conc)}` : ", sem REIDI"));
+  else if (l.precoId) info.push("Esse tipo não tem preço vigente na data da concretagem.");
+  else info.push("Escolha o tipo do concreto para puxar o preço do contrato, ou digite o unitário.");
+  info.push("HE = 50% do unitário do concreto. Os unitários podem ser alterados.");
+  $("#vInfo").textContent = info.join(" ");
+}
+["uConc", "uFalt", "uHe", "uPerm", "uDev"].forEach((id) => $("#" + id).addEventListener("input", (e) => { e.target.dataset.manual = e.target.value.trim() ? "1" : ""; updConcreto(); }));
+["lFornec", "lData"].forEach((id) => { $("#" + id).addEventListener("change", () => { if (curCat === "concreto") { fillTraco(); updConcreto(); } }); });
+$("#lFckP").addEventListener("change", () => { if (curCat === "concreto") { fillTraco(); updConcreto(); } });
+$("#lTraco").addEventListener("change", () => {
+  const p = precos.find((x) => x.id === $("#lTraco").value);
+  if (p && !p.servico && p.fck != null) $("#lFckP").value = fmtIn(p.fck);
+  if (p && p.servico) $("#lFckP").value = "";
+  $("#uConc").dataset.manual = ""; $("#uHe").dataset.manual = "";
+  updConcreto(); updEns();
+});
+["cM3", "cFaltQ", "cHeQ", "cPermQ", "cDevQ"].forEach((id) => $("#" + id).addEventListener("input", updConcreto));
 function updPrecoHint() {
   const box = $("#precoHint");
-  if (curCat === "concreto") fillTraco();
+  if (curCat === "concreto") { box.hidden = true; return; }
   const c = calcValor(formLancLike());
-  if (!c) {
-    const l = formLancLike();
-    if (curCat === "concreto" && tracosPara(l).length > 1 && !l.precoId) { box.hidden = false; $("#precoHintTxt").textContent = "Há mais de um traço contratado para esse fck: escolha em \"Traço contratado\" para calcular o valor."; $("#btnUsarPreco").hidden = true; return; }
-    box.hidden = true; return;
-  }
-  $("#btnUsarPreco").hidden = false;
+  if (!c) { box.hidden = true; return; }
   box.hidden = false;
   const un = esc(UNID[c.preco.unidade] || c.preco.unidade);
-  const rd = c.pct || c.bpct ? ` − REIDI${c.pct && c.bpct ? " " + nf.format(c.pct) + "%" : c.pct ? " " + nf.format(c.pct) + "% (só no concreto)" : " " + nf.format(c.bpct) + "% (só na bomba)"} = <strong>${money(c.unitLiq + c.bunitLiq)}/${un}</strong>` : "";
-  const bom = c.bunit ? ` + bomba ${money(c.bunit)}/m³` : "";
-  $("#precoHintTxt").innerHTML = `Preço negociado: ${c.pct || c.bpct ? "" : "<strong>"}${money(c.unit)}/${un}${c.pct || c.bpct ? "" : "</strong>"}${bom}${rd} (${esc(c.preco.fornecedor)}, desde ${fmtDate(c.vig.inicio)}) → <strong>${money(c.valor)}</strong>${c.pct || c.bpct ? ` <span class="muted">(sem REIDI ${money(c.valorBruto)})</span>` : ""}`;
+  const rd = c.pct ? ` − REIDI ${nf.format(c.pct)}% = <strong>${money(c.unitLiq)}/${un}</strong>` : "";
+  $("#precoHintTxt").innerHTML = `Preço negociado: ${c.pct ? "" : "<strong>"}${money(c.unit)}/${un}${c.pct ? "" : "</strong>"}${rd} (${esc(c.preco.fornecedor)}, desde ${fmtDate(c.vig.inicio)}) → <strong>${money(c.valor)}</strong>${c.pct ? ` <span class="muted">(sem REIDI ${money(c.valorBruto)})</span>` : ""}`;
   $("#btnUsarPreco").onclick = () => { $("#lValor").value = fmtIn(c.valor); };
 }
 function updEns() {
   const fck = parseNum($("#lFckP").value);
-  const m28 = ensMax({ cp1: $("#e28a").value ? parseNum($("#e28a").value) : null, cp2: $("#e28b").value ? parseNum($("#e28b").value) : null });
+  const m28 = ensMax({ cp1: numOrNull("e28a"), cp2: numOrNull("e28b") });
   const el = $("#ensResumo");
   if (m28 == null || !fck) { el.textContent = ""; el.className = "hint"; return; }
   el.className = "status " + (m28 >= fck ? "ok" : "err");
-  el.textContent = m28 >= fck ? `28 dias: ${nf.format(m28)} MPa, atingiu o fck ${nf.format(fck)} (${nf0.format((m28 / fck) * 100)}%).` : `28 dias: ${nf.format(m28)} MPa, abaixo do fck ${nf.format(fck)} (${nf0.format((m28 / fck) * 100)}%).`;
+  el.textContent = m28 >= fck ? `28 dias: ${nf.format(m28)} MPa, atingiu o FCK ${nf.format(fck)} (${nf0.format((m28 / fck) * 100)}%).` : `28 dias: ${nf.format(m28)} MPa, abaixo do FCK ${nf.format(fck)} (${nf0.format((m28 / fck) * 100)}%).`;
 }
 ["lFckP", "e28a", "e28b"].forEach((id) => $("#" + id).addEventListener("input", updEns));
-["lFornec", "lFckP", "lFckA", "lBitola", "lQtd", "lData", "lKm", "lTipoAco", "lTraco", "lBomba"].forEach((id) => { $("#" + id).addEventListener("input", updPrecoHint); $("#" + id).addEventListener("change", updPrecoHint); });
+["lFornec", "lBitola", "lQtd", "lData", "lKm", "lTipoAco"].forEach((id) => { $("#" + id).addEventListener("input", updPrecoHint); $("#" + id).addEventListener("change", updPrecoHint); });
 function fillObraSelect(sel, val) {
   const ativas = obras.filter((o) => o.ativa !== false || o.id === val);
   sel.innerHTML = `<option value="">A definir</option>` + ativas.map((o) => `<option value="${esc(o.id)}">${esc(o.nome)}${o.km && !o.nome.includes(String(o.km).replace(/^KM\s*/i, "")) ? " · " + esc(o.km) : ""}</option>`).join("");
@@ -904,7 +1007,14 @@ function openLanc(l, cat) {
   $("#lData").value = l ? l.data || "" : today();
   $("#lNum").value = v("numero"); $("#lFornec").value = v("fornecedor"); $("#lChave").value = v("chave");
   $("#lDesc").value = v("descricao"); $("#lPeca").value = v("peca");
-  $("#lFckP").value = fmtIn(v("fckProjeto")); $("#lFckA").value = fmtIn(v("fckAplicado"));
+  $("#lFckP").value = fmtIn(v("fckProjeto"));
+  const ex = (l && l.extras) || {}, um = (l && l.unitManual) || {};
+  $("#cM3").value = l ? fmtIn(l.servico ? l.m3Bombeado : l.qtd) : "";
+  $("#cFaltQ").value = fmtIn(ex.m3Faltante); $("#cFaltNF").value = ex.nfFaltante || "";
+  $("#cHeQ").value = fmtIn(ex.he); $("#cHeNF").value = ex.heNF || "";
+  $("#cPermQ").value = fmtIn(ex.permanenciaH); $("#cPermNF").value = ex.permanenciaNF || "";
+  $("#cDevQ").value = fmtIn(ex.devolucaoM3); $("#cDevNF").value = ex.devolucaoNF || "";
+  [["conc", "uConc"], ["falt", "uFalt"], ["he", "uHe"], ["perm", "uPerm"], ["dev", "uDev"]].forEach(([k, id]) => { const el = $("#" + id); el.dataset.manual = um[k] != null ? "1" : ""; el.value = um[k] != null ? fmtIn(um[k]) : ""; });
   $("#lTipoAco").value = v("tipoAco", "CA-50"); $("#lBitola").value = l && l.bitola ? String(l.bitola).replace(".", ",") : "";
   $("#lQtd").value = l ? fmtIn(l.qtd) : ""; $("#lValor").value = l ? fmtIn(l.valor) : "";
   $("#lKm").value = l ? fmtIn(l.km) : ""; $("#lOrig").value = v("origem"); $("#lDest").value = v("destino"); $("#lObs").value = v("obs");
@@ -916,8 +1026,7 @@ function openLanc(l, cat) {
   $("#lDoc").value = l ? l.doc || "NF-e" : (c === "frete" ? "CT-e" : c === "concreto" ? "NF remessa" : "NF-e");
   setCat(c);
   $("#fileNota").value = "";
-  $("#lBomba").value = v("bomba", "");
-  if (c === "concreto") fillTraco(l ? l.precoId || "" : "");
+  if (c === "concreto") { fillTraco(l ? l.precoId || "" : ""); updConcreto(); }
   updPrecoHint();
   openModal("mLanc");
 }
@@ -929,12 +1038,16 @@ $("#formLanc").addEventListener("submit", async (e) => {
   const msg = $("#lancMsg");
   if (!db) { msg.className = "status err"; msg.textContent = "Banco de dados indisponível nesta visualização."; return; }
   let valor = parseNum($("#lValor").value);
-  let valorCalc = false, precoId = null;
-  if (!valor) { const c = calcValor(formLancLike()); if (c) { valor = c.valor; valorCalc = true; precoId = c.preco.id; } }
-  else if (curCat === "concreto" && $("#lTraco").value) precoId = $("#lTraco").value;
+  let valorCalc = false, precoId = null, concCalc = null;
+  if (curCat === "concreto") {
+    const fl = formLancLike(); concCalc = calcConcreto(fl);
+    valor = concCalc.total; valorCalc = true; precoId = fl.precoId;
+    if (!$("#lFornec").value.trim()) { msg.className = "status err"; msg.textContent = "Informe a concreteira."; return; }
+    if (!parseNum($("#cM3").value)) { msg.className = "status err"; msg.textContent = "Informe a quantidade realizada (m³)."; return; }
+  } else if (!valor) { const c = calcValor(formLancLike()); if (c) { valor = c.valor; valorCalc = true; precoId = c.preco.id; } }
   if (!$("#lData").value) { msg.className = "status err"; msg.textContent = "Informe a data."; return; }
   if (!valor && curCat === "frete") { msg.className = "status err"; msg.textContent = "Informe o valor do frete."; return; }
-  if (curCat !== "frete" && !parseNum($("#lQtd").value) && !(editLanc && editLanc.servico)) { msg.className = "status err"; msg.textContent = curCat === "concreto" ? "Informe o volume (m³)." : "Informe o peso (kg)."; return; }
+  if (curCat === "aco" && !parseNum($("#lQtd").value)) { msg.className = "status err"; msg.textContent = curCat === "concreto" ? "Informe o volume (m³)." : "Informe o peso (kg)."; return; }
   const chave = onlyDigits($("#lChave").value);
   const dup = chave && lancs.find((x) => x.chave === chave && (!editLanc || x.id !== editLanc.id));
   if (dup && !msg.dataset.dupOk) {
@@ -954,9 +1067,8 @@ $("#formLanc").addEventListener("submit", async (e) => {
     numero: $("#lNum").value.trim(),
     chave,
     fornecedor: $("#lFornec").value.trim(),
-    descricao: curCat === "frete" ? $("#lDesc").value.trim() : (editLanc && editLanc.descricao) || $("#lDesc").value.trim(),
-    qtd: qtdRaw ? parseNum(qtdRaw) : (curCat === "frete" ? 1 : 0),
-    ...(editLanc && editLanc.servico ? { qtd: 0 } : {}),
+    descricao: curCat === "frete" ? $("#lDesc").value.trim() : (editLanc && editLanc.descricao) || "",
+    qtd: curCat === "concreto" ? 0 : (qtdRaw ? parseNum(qtdRaw) : (curCat === "frete" ? 1 : 0)),
     unidade: curCat === "frete" ? "viagem" : CATS[curCat].un,
     valor: Math.round(valor * 100) / 100,
     km: curCat === "frete" ? parseNum($("#lKm").value) : 0,
@@ -967,7 +1079,8 @@ $("#formLanc").addEventListener("submit", async (e) => {
     ...(curCat === "concreto" ? {
       remessa: $("#lRemessa").value.trim(), traco: $("#lTracoCod").value.trim(), dataNF: $("#lDataNF").value || "",
       fckProjeto: $("#lFckP").value ? parseNum($("#lFckP").value) : null,
-      fckAplicado: $("#lFckA").value ? parseNum($("#lFckA").value) : null,
+      ...(() => { const fl = formLancLike(); return { qtd: fl.qtd, m3Bombeado: fl.m3Bombeado, servico: fl.servico, extras: fl.extras, unitManual: fl.unitManual,
+        valorUnit: concCalc.u.conc, valorConcreto: concCalc.linhas.conc.total, valoresLinhas: Object.fromEntries(Object.entries(concCalc.linhas).map(([k, v]) => [k, { q: v.q, unit: v.unit, total: v.total }])) }; })(),
       ensaios: {
         d7: { cp1: $("#e7a").value ? parseNum($("#e7a").value) : null, cp2: $("#e7b").value ? parseNum($("#e7b").value) : null, data: $("#e7d").value || "" },
         d14: { cp1: $("#e14a").value ? parseNum($("#e14a").value) : null, cp2: $("#e14b").value ? parseNum($("#e14b").value) : null, data: $("#e14d").value || "" },
@@ -977,8 +1090,7 @@ $("#formLanc").addEventListener("submit", async (e) => {
     ...(curCat === "aco" ? { tipoAco: $("#lTipoAco").value, bitola: $("#lBitola").value ? parseNum($("#lBitola").value) : null } : {}),
     valorCalculado: valorCalc || (!!editLanc && !!editLanc.valorCalculado && parseNum($("#lValor").value) === Number(editLanc.valor)),
     precoId: precoId || (editLanc && editLanc.valorCalculado ? editLanc.precoId || null : null),
-    bomba: curCat === "concreto" ? $("#lBomba").value : "",
-    reidiPct: valorCalc ? reidiPct($("#lFornec").value) : (editLanc ? editLanc.reidiPct ?? null : null),
+    reidiPct: curCat === "concreto" ? concCalc.pct : valorCalc ? reidiPct($("#lFornec").value) : (editLanc ? editLanc.reidiPct ?? null : null),
     origemDados: editLanc ? (editLanc.origemDados || "manual") : (importMeta || "manual"),
     criadoEm: editLanc ? editLanc.criadoEm || Date.now() : Date.now(),
     atualizadoEm: Date.now(),
@@ -1058,7 +1170,12 @@ function applyExtract(x, origem) {
   const txtD = String(x.descricao || "");
   if (cat !== "frete") { $("#lDesc").value = txtD; if (!$("#lPeca").value && x.peca) $("#lPeca").value = x.peca; }
   const fm = txtD.match(/FCK\s*[:=]?\s*(\d{2})/i) || txtD.match(/(\d{2})\s*MPA/i);
-  if (cat === "concreto" && fm) { $("#lFckA").value = fm[1]; if (!$("#lFckP").value) $("#lFckP").value = fm[1]; }
+  if (cat === "concreto") {
+    if (fm && !$("#lFckP").value) $("#lFckP").value = fm[1];
+    if (x.quantidade) $("#cM3").value = fmtIn(Math.round(parseNum(x.quantidade) * 1000) / 1000);
+    if (x.numero) $("#lNum").value = String(x.numero).replace(/^0+(?=\d)/, "");
+    fillTraco(); updConcreto(); updEns();
+  }
   const bm = txtD.match(/(\d{1,2}[.,]\d)\s*MM/i);
   if (cat === "aco") { if (bm) $("#lBitola").value = bm[1].replace(".", ","); if (/CA[- ]?60/i.test(txtD)) $("#lTipoAco").value = "CA-60"; else if (/CA[- ]?50/i.test(txtD)) $("#lTipoAco").value = "CA-50"; else if (/TELA/i.test(txtD)) $("#lTipoAco").value = "Tela soldada"; }
   let obraId = x.obraId && obraById(x.obraId) ? x.obraId : guessObra([x.observacao, x.destino, x.enderecoEntrega, x.descricao].join(" "));
@@ -1267,9 +1384,9 @@ $("#btnExcluirObra").onclick = async (e) => {
 };
 
 /* ---------- Preços negociados ---------- */
-const UNID = { m3: "m³", kg: "kg", t: "t", viagem: "viagem", km: "km", vb: "verba" };
-const UNIDS_CAT = { concreto: ["m3", "vb"], aco: ["kg", "t"], frete: ["viagem", "km", "t"] };
-const SERV_TXT = { "bomba-mangote": "Taxa de bomba – mangote", "bomba-lanca": "Taxa de bomba – lança", minimo: "Taxa mínima / verba", outro: "Outro serviço" };
+const UNID = { m3: "m³", kg: "kg", t: "t", viagem: "viagem", km: "km", vb: "verba", h: "hora" };
+const UNIDS_CAT = { concreto: ["m3", "h", "vb"], aco: ["kg", "t"], frete: ["viagem", "km", "t"] };
+const SERV_TXT = { "bomba-mangote": "Bombeamento – mangote/estacionária", "bomba-lanca": "Bombeamento – lança", minimo: "Adicional volume mínimo de bomba", "m3-faltante": "M³ faltante", permanencia: "Adicional de permanência", devolucao: "Adicional de devolução", outro: "Outro serviço" };
 let precoCat = "concreto", editPreco = null, pFormCat = "concreto", reajPreco = null;
 const normF = (s) => normTxt(s).replace(/\b(LTDA|S\/?A|ME|EPP|EIRELI|CONCRETO|CONCRETOS|COMERCIO|INDUSTRIA|DE|DO|DA)\b/g, "").replace(/[^A-Z0-9]/g, "");
 function fornIgual(a, b) { const x = normF(a), y = normF(b); return !!x && !!y && (x.includes(y) || y.includes(x)); }
@@ -1291,7 +1408,36 @@ function reidiPct(forn) {
   return 0;
 }
 const comReidi = (v, pct) => Math.round(Number(v) * (1 - pct / 100) * 100) / 100;
+function unitServ(l, serv, lista, padrao) {
+  const p = lista.find((x) => x.categoria === "concreto" && x.servico === serv && (!x.fornecedor || fornIgual(x.fornecedor, l.fornecedor)) && vigente(x, l.data));
+  if (!p) return padrao;
+  const v = vigente(p, l.data);
+  return p.semReidi ? Number(v.valor) : comReidi(v.valor, reidiPct(p.fornecedor || l.fornecedor));
+}
+function calcConcreto(l, lista = precos) {
+  let p = l.precoId ? lista.find((x) => x.id === l.precoId) || null : null;
+  if (!p && l.fornecedor && n2(l.fckProjeto) != null) {
+    const m = lista.filter((x) => x.categoria === "concreto" && !x.servico && Number(x.fck) === Number(l.fckProjeto) && (!x.fornecedor || fornIgual(x.fornecedor, l.fornecedor)) && vigente(x, l.data));
+    if (m.length === 1) p = m[0];
+  }
+  const vig = p ? vigente(p, l.data) : null;
+  const pct = p && vig && !p.semReidi ? reidiPct(p.fornecedor || l.fornecedor) : 0;
+  const um = l.unitManual || {}, ex = l.extras || {};
+  const conc = um.conc != null ? um.conc : vig ? comReidi(vig.valor, pct) : null;
+  const u = {
+    conc,
+    falt: um.falt != null ? um.falt : unitServ(l, "m3-faltante", lista, 250),
+    he: um.he != null ? um.he : conc != null ? Math.round(conc * 0.5 * 100) / 100 : null,
+    perm: um.perm != null ? um.perm : unitServ(l, "permanencia", lista, 300),
+    dev: um.dev != null ? um.dev : unitServ(l, "devolucao", lista, 300),
+  };
+  const q = { conc: (p && p.servico ? Number(l.m3Bombeado) : Number(l.qtd)) || 0, falt: Number(ex.m3Faltante) || 0, he: Number(ex.he) || 0, perm: Number(ex.permanenciaH) || 0, dev: Number(ex.devolucaoM3) || 0 };
+  const linhas = {}; let total = 0;
+  for (const k of Object.keys(q)) { const t = Math.round(q[k] * (Number(u[k]) || 0) * 100) / 100; linhas[k] = { q: q[k], unit: u[k], total: t }; total += t; }
+  return { preco: p, vig, pct, u, linhas, total: Math.round(total * 100) / 100, unit: vig ? Number(vig.valor) : null, valor: Math.round(total * 100) / 100 };
+}
 function calcValor(l, lista = precos) {
+  if (l.categoria === "concreto" && (l.extras || l.unitManual || l.m3Bombeado != null)) { const c = calcConcreto(l, lista); return c.preco || (l.unitManual && l.unitManual.conc != null) ? c : null; }
   let p = null;
   if (l.precoId) p = lista.find((x) => x.id === l.precoId && !x.servico) || null;
   if (!p) {
@@ -1423,7 +1569,7 @@ function openPreco(p) {
   openModal("mPreco");
 }
 $("#btnNovoPreco").onclick = () => openPreco(null);
-$("#pServ").onchange = () => { $("#pFck").closest(".field").hidden = !!$("#pServ").value; $("#pUn").value = ["minimo", "outro"].includes($("#pServ").value) ? "vb" : "m3"; };
+$("#pServ").onchange = () => { const sv = $("#pServ").value; $("#pFck").closest(".field").hidden = !!sv; $("#pUn").value = sv === "permanencia" ? "h" : sv === "outro" ? "vb" : "m3"; };
 $("#formPreco").addEventListener("submit", async (e) => {
   e.preventDefault();
   const msg = $("#precoMsg");
@@ -1453,7 +1599,7 @@ $("#btnExcluirPreco").onclick = async (e) => {
   try { await db.collection("precos").doc(editPreco.id).delete(); closeModal("mPreco"); toast("Preço excluído. Os lançamentos já salvos mantêm o valor."); }
   catch (err) { $("#precoMsg").className = "status err"; $("#precoMsg").textContent = dbErr(err); }
 };
-const afetados = (p, inicio) => lancs.filter((l) => l.valorCalculado && (l.data || "") >= inicio && (l.precoId === p.id || (p.servico && l.categoria === "concreto" && l.bomba && p.servico === "bomba-" + l.bomba && fornIgual(p.fornecedor, l.fornecedor))));
+const afetados = (p, inicio) => lancs.filter((l) => l.valorCalculado && (l.data || "") >= inicio && (l.precoId === p.id || (p.servico && l.categoria === "concreto" && fornIgual(p.fornecedor, l.fornecedor) && ((p.servico === "bomba-" + l.bomba) || ["m3-faltante", "permanencia", "devolucao"].includes(p.servico)))));
 function updRecalcN() { if (!reajPreco) return; const n = afetados(reajPreco, $("#rpInicio").value || "9999").length; $("#rpRecalcN").textContent = `(${n} lançamento${n === 1 ? "" : "s"})`; }
 $("#rpInicio").addEventListener("change", updRecalcN);
 function openReajPreco(p) {
