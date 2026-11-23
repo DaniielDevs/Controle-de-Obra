@@ -334,6 +334,11 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
           <p><strong>Anexar a nota</strong> para preencher sozinho</p>
           <p class="hint">XML da NF-e ou CT-e (mais preciso), PDF do DANFE (mesmo escaneado) ou foto da nota. No frete, selecione o CT-e junto com os XMLs das NF-e (ou um .zip) para puxar o material.</p>
           <p class="status" id="importStatus" aria-live="polite"></p>
+          <div id="nfeFalta" hidden style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px">
+            <button type="button" class="btn" id="btnMeuDanfe">Copiar chave e abrir o Meu Danfe</button>
+            <label class="btn primary" for="fileNFeFalta">Anexar a NF-e (XML ou PDF)</label>
+            <input id="fileNFeFalta" type="file" multiple accept=".xml,.zip,.pdf,application/pdf,text/xml,application/xml" class="sr">
+          </div>
         </div>
         <label class="btn" for="fileNota">Escolher arquivo</label>
         <input id="fileNota" type="file" multiple accept=".xml,.zip,.pdf,application/pdf,text/xml,application/xml,image/png,image/jpeg" class="sr">
@@ -642,7 +647,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 17h45</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 18h00</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -1177,7 +1182,7 @@ function openLanc(l, cat) {
   const c = l ? l.categoria : (cat || lancCat || "concreto");
   $("#lDoc").value = l ? l.doc || "NF-e" : (c === "frete" ? "CT-e" : c === "concreto" ? "NF remessa" : "NF-e");
   setCat(c);
-  $("#fileNota").value = "";
+  $("#fileNota").value = ""; ultimoCte = null; $("#nfeFalta").hidden = true; $("#nfeFalta").style.display = "none";
   if (c === "concreto") { fillTraco(l ? l.precoId || "" : ""); updConcreto(); }
   updPrecoHint();
   openModal("mLanc");
@@ -1500,8 +1505,9 @@ function materialDeNFes(nfes) {
   const arr = [...g.values()];
   return arr.slice(0, 6).map((i) => `${i.x} (${fmtQtd(i)})`).join(" + ") + (arr.length > 6 ? ` (+${arr.length - 6} itens)` : "");
 }
+let ultimoCte = null;
 function applyFrete(cte, nfesExtras) {
-  importMeta = "xml";
+  importMeta = "xml"; ultimoCte = cte;
   if (curCat !== "frete") setCat("frete");
   const ok = [], falta = [];
   $("#lDoc").value = "CT-e";
@@ -1541,7 +1547,7 @@ function applyFrete(cte, nfesExtras) {
   $("#lancMsg").dataset.nfes = JSON.stringify(chaves.map((c) => { const n = mapa.get(c); return { chave: c, numero: n ? n.numero : String(Number(c.slice(25, 34))), emitente: n ? n.emitente : "", itens: n ? (n.itens || []).slice(0, 20) : [] }; }));
   let m = `Preenchido: ${ok.join(", ")}.`;
   if (chaves.length) m += ` O CT-e transporta ${chaves.length} NF-e: ${achadas.length} encontrada(s) na biblioteca.`;
-  if (faltam.length) m += ` Não encontrei ${faltam.length} NF-e (${faltam.slice(0, 5).map((c) => Number(c.slice(25, 34))).join(", ")}): suba o XML delas junto com o CT-e ou na Biblioteca de NF-e para puxar o material.`;
+  if (faltam.length) m += ` Falta a NF-e ${faltam.slice(0, 5).map((c) => Number(c.slice(25, 34))).join(", ")} na biblioteca: clique em \"Anexar a NF-e\" abaixo para puxar material, quantidade e obra.`;
   if (!faltam.length && !achadas.length && nums.length && !jaLanc) m += ` Não encontrei a NF-e ${nums.join(", ")} na biblioteca: suba o XML (ou PDF) dela junto com o CT-e para puxar material, quantidade e obra.`;
   if (falta.length) m += " Confira/complete: " + falta.join(", ") + ".";
   const dup = cte.chave && lancs.find((l) => l.chave === cte.chave);
@@ -1559,8 +1565,35 @@ function applyFrete(cte, nfesExtras) {
     m += ` Encontrei o lançamento que estava aguardando este CT-e (NF-e ${(esp.nfsTransp || []).map((x) => x.numero).join(", ")}): ao salvar, ele é completado.`;
   }
   setImp(m, faltam.length || falta.length || dup ? "warn" : "ok");
+  const semNFe = !achadas.length && nums.length && !(jaLanc && matFrete(jaLanc) !== "OUTRO");
+  const box = $("#nfeFalta"); box.hidden = !semNFe; box.style.display = semNFe ? "flex" : "none";
+  box.dataset.chaves = faltam.join(","); box.dataset.nums = nums.join(", ");
   updPrecoHint();
 }
+async function lerNFesDeArquivos(files) {
+  const itens = await expandirArquivos(files), nfes = [];
+  for (const x of itens.filter((i) => i.text)) { const p = parseXmlNota(x.text); if (p && p.tipoDocumento === "NF-e") nfes.push(resumoNFe(p)); }
+  for (const o of itens.filter((i) => i.file && (/\.pdf$/i.test(i.file.name) || i.file.type === "application/pdf"))) {
+    const r = await textoDoArquivo(o.file); const text = r.text || (r.canvas ? await ocrImagem(r.canvas) : "");
+    const n = parseDanfeNFe(text); if (n.chave) nfes.push(n);
+  }
+  return nfes;
+}
+$("#btnMeuDanfe").onclick = async () => {
+  const ch = ($("#nfeFalta").dataset.chaves || "").split(",").filter(Boolean)[0] || "";
+  if (ch) { try { await navigator.clipboard.writeText(ch); toast("Chave da NF-e copiada: cole no Meu Danfe e baixe o XML."); } catch { prompt("Copie a chave da NF-e:", ch); } }
+  window.open("https://meudanfe.com.br/", "_blank", "noopener");
+};
+$("#fileNFeFalta").addEventListener("change", async (e) => {
+  const fs = [...e.target.files]; e.target.value = ""; if (!fs.length || !ultimoCte) return;
+  setImp("Lendo a NF-e…");
+  try {
+    const nfes = await lerNFesDeArquivos(fs);
+    if (!nfes.length) { setImp("Não reconheci esse arquivo como NF-e. Use o XML ou o PDF (DANFE) da nota.", "err"); return; }
+    await guardarNFes(nfes);
+    applyFrete(ultimoCte, nfes);
+  } catch (err) { console.error(err); setImp("Não consegui ler a NF-e.", "err"); }
+});
 function parseDanfeNFe(texto) {
   const t = String(texto || "").replace(/\r/g, ""), U = t.toUpperCase(), F = U.replace(/\s+/g, " ");
   const n = {};
