@@ -335,6 +335,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
           <p class="hint">XML da NF-e ou CT-e (mais preciso), PDF do DANFE (mesmo escaneado) ou foto da nota. No frete, selecione o CT-e junto com os XMLs das NF-e (ou um .zip) para puxar o material.</p>
           <p class="status" id="importStatus" aria-live="polite"></p>
           <div id="nfeFalta" hidden style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px">
+            <span id="nfeFaltaChave" class="mono" style="flex-basis:100%;font-size:12px"></span>
             <button type="button" class="btn" id="btnMeuDanfe">Copiar chave e abrir o Meu Danfe</button>
             <label class="btn primary" for="fileNFeFalta">Anexar a NF-e (XML ou PDF)</label>
             <input id="fileNFeFalta" type="file" multiple accept=".xml,.zip,.pdf,application/pdf,text/xml,application/xml" class="sr">
@@ -364,7 +365,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
           <select id="lDoc"><option>NF-e</option><option>CT-e</option><option>NF remessa</option><option>Recibo</option><option>Outro</option></select></div>
         <div class="field span2" data-only="concreto aco"><label for="lPeca" id="lPecaLabel">Aplicação</label><input id="lPeca" autocomplete="off" placeholder="Ex.: Sapata Ap. 07, Travessa Ap. 05, Laje"></div>
         <div class="field"><label for="lNum" id="lNumLabel">Número da NF</label><input id="lNum" inputmode="numeric" autocomplete="off"></div>
-        <div class="field span3"><label for="lChave">Chave de acesso (44 dígitos)</label><input id="lChave" class="mono" inputmode="numeric" autocomplete="off" maxlength="60"></div>
+        <div class="field span3"><label for="lChave" id="lChaveLabel">Chave de acesso (44 dígitos)</label><input id="lChave" class="mono" inputmode="numeric" autocomplete="off" maxlength="60"></div>
 
         <!-- FRETE -->
         <div class="field" data-only="frete"><label for="lNFsT">NF remessa</label><input id="lNFsT" autocomplete="off" placeholder="Nº da NF (ou mais de uma, separadas por vírgula)"></div>
@@ -647,7 +648,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 18h00</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 18h15</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -1033,7 +1034,7 @@ function setCat(cat) {
   $$("#segCat button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.cat === curCat)));
   $$("#formLanc [data-only]").forEach((el) => (el.hidden = !el.dataset.only.split(" ").includes(curCat)));
   const t = FORM_TXT[curCat];
-  $("#lFornecLabel").textContent = t.forn; $("#lNumLabel").textContent = t.num; $("#lDataLabel").textContent = t.data;
+  $("#lFornecLabel").textContent = t.forn; $("#lNumLabel").textContent = t.num; $("#lChaveLabel").textContent = curCat === "frete" ? "Chave de acesso do CT-e (44 dígitos)" : "Chave de acesso (44 dígitos)"; $("#lDataLabel").textContent = t.data;
   if (t.qtd) $("#lQtdLabel").textContent = t.qtd; if (t.valor) $("#lValorLabel").textContent = t.valor;
   $("#lPecaLabel").textContent = curCat === "aco" ? "Peça / aplicação" : "Aplicação";
   const forns = [...new Set(precos.filter((p) => p.categoria === curCat).map((p) => p.fornecedor).concat(lancs.filter((l) => l.categoria === curCat).map((l) => l.fornecedor)).filter(Boolean))];
@@ -1568,6 +1569,7 @@ function applyFrete(cte, nfesExtras) {
   const semNFe = !achadas.length && nums.length && !(jaLanc && matFrete(jaLanc) !== "OUTRO");
   const box = $("#nfeFalta"); box.hidden = !semNFe; box.style.display = semNFe ? "flex" : "none";
   box.dataset.chaves = faltam.join(","); box.dataset.nums = nums.join(", ");
+  $("#nfeFaltaChave").textContent = faltam.length ? `Chave da NF-e ${Number(faltam[0].slice(25, 34))} (documentos originários): ${faltam[0].replace(/(\d{4})(?=\d)/g, "$1 ")}` : "";
   updPrecoHint();
 }
 async function lerNFesDeArquivos(files) {
