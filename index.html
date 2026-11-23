@@ -273,6 +273,15 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
         <div class="field"><label for="fNF">Nota fiscal</label><input id="fNF" inputmode="numeric" autocomplete="off" list="fNFList" placeholder="Nº da NF"><datalist id="fNFList"></datalist></div>
         <div class="field"><label for="fForn" id="fFornLabel">Fornecedor</label><select id="fForn"><option value="">Todos</option></select></div>
         <div class="field" id="fTipoBox"><label for="fTipo" id="fTipoLabel">Tipo de concreto</label><select id="fTipo"><option value="">Todos</option></select></div>
+        <div class="field" id="fEnsBox"><label for="fEns">Ensaios</label><select id="fEns">
+          <option value="">Todos</option>
+          <option value="vazio">Sem nenhum resultado</option>
+          <option value="sem7">Sem resultado de 7 dias</option>
+          <option value="sem28">Sem resultado de 28 dias</option>
+          <option value="atraso28">28 dias atrasado (+30 dias da concretagem)</option>
+          <option value="abaixo">28 dias abaixo do FCK</option>
+          <option value="completo">Com 7 e 28 dias</option>
+        </select></div>
         <div class="field"><label for="fEmiDe">Emissão da NF – de</label><input id="fEmiDe" type="date"></div>
         <div class="field"><label for="fEmiAte">até</label><input id="fEmiAte" type="date"></div>
         <div class="field"><label for="fMes">Mês da remessa</label><input id="fMes" type="month"></div>
@@ -615,7 +624,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 15h20</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 15h35</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -861,10 +870,13 @@ function fillFiltros() {
   fill("fTipo", tipos, "Todos");
   $("#fNFList").innerHTML = [...new Set(ls.map((l) => l.numero).filter(Boolean))].sort((a, b) => Number(b) - Number(a)).slice(0, 300).map((v) => `<option value="${esc(v)}">`).join("");
   $("#fFornLabel").textContent = lancCat === "frete" ? "Transportadora" : lancCat === "concreto" ? "Concreteira" : "Fornecedor";
+  $("#fEnsBox").hidden = lancCat !== "concreto"; if (lancCat !== "concreto") $("#fEns").value = "";
   $("#fTipoLabel").textContent = lancCat === "concreto" ? "Tipo de concreto" : lancCat === "aco" ? "Tipo / bitola" : "Material";
 }
 function filteredLancs() {
   const sel = $("#obraGlobal").value, mes = $("#fMes").value, q = $("#fBusca").value.trim().toLowerCase();
+  const ens = $("#fEns").value;
+  const hojeMenos30 = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10); })();
   const nfq = $("#fNF").value.replace(/\D/g, "").replace(/^0+/, ""), forn = $("#fForn").value, tipo = $("#fTipo").value, de = $("#fEmiDe").value, ate = $("#fEmiAte").value;
   return lancs.filter((l) => {
     if (l.categoria !== lancCat) return false;
@@ -872,6 +884,16 @@ function filteredLancs() {
     if (nfq && String(l.numero || "").replace(/\D/g, "").replace(/^0+/, "") !== nfq) return false;
     if (forn && !fornIgual(forn, l.fornecedor)) return false;
     if (tipo && tipoDe(l) !== tipo) return false;
+    if (ens && lancCat === "concreto") {
+      if (l.servico) return false;
+      const e = l.ensaios || {}, m7 = ensMax(e.d7), m28 = ensMax(e.d28), m14 = ensMax(e.d14);
+      if (ens === "vazio" && (m7 != null || m14 != null || m28 != null)) return false;
+      if (ens === "sem7" && m7 != null) return false;
+      if (ens === "sem28" && m28 != null) return false;
+      if (ens === "atraso28" && (m28 != null || !l.data || l.data > hojeMenos30)) return false;
+      if (ens === "abaixo" && !(m28 != null && n2(l.fckProjeto) != null && m28 < Number(l.fckProjeto))) return false;
+      if (ens === "completo" && (m7 == null || m28 == null)) return false;
+    }
     if (de && emissao(l) < de) return false;
     if (ate && emissao(l) > ate) return false;
     if (mes && !(l.data || "").startsWith(mes)) return false;
@@ -2249,9 +2271,9 @@ async function limparExemplos() {
 /* ---------- Filtros ---------- */
 $("#obraGlobal").onchange = () => { renderPainel(); renderLancs(); };
 $("#fMes").onchange = renderLancs;
-["fForn", "fTipo", "fEmiDe", "fEmiAte"].forEach((id) => ($("#" + id).onchange = renderLancs));
+["fForn", "fTipo", "fEns", "fEmiDe", "fEmiAte"].forEach((id) => ($("#" + id).onchange = renderLancs));
 $("#fNF").oninput = renderLancs;
-$("#btnLimparFiltros").onclick = () => { ["fNF", "fEmiDe", "fEmiAte", "fMes", "fBusca"].forEach((id) => ($("#" + id).value = "")); $("#fForn").value = ""; $("#fTipo").value = ""; renderLancs(); };
+$("#btnLimparFiltros").onclick = () => { ["fNF", "fEmiDe", "fEmiAte", "fMes", "fBusca"].forEach((id) => ($("#" + id).value = "")); $("#fForn").value = ""; $("#fTipo").value = ""; $("#fEns").value = ""; renderLancs(); };
 $("#fBusca").oninput = renderLancs;
 $("#btnCsv").onclick = copiarCsv;
 
