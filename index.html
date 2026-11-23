@@ -269,8 +269,14 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
     </div>
     <div class="panel">
       <div class="panel-b filters">
-        <div class="field"><label for="fMes">Mês</label><input id="fMes" type="month"></div>
-        <div class="field grow"><label for="fBusca">Buscar</label><input id="fBusca" type="search" placeholder="Nº da nota ou remessa, fornecedor, peça, chave…"></div>
+        <div class="field"><label for="fNF">Nota fiscal</label><input id="fNF" inputmode="numeric" autocomplete="off" list="fNFList" placeholder="Nº da NF"><datalist id="fNFList"></datalist></div>
+        <div class="field"><label for="fForn" id="fFornLabel">Fornecedor</label><select id="fForn"><option value="">Todos</option></select></div>
+        <div class="field" id="fTipoBox"><label for="fTipo" id="fTipoLabel">Tipo de concreto</label><select id="fTipo"><option value="">Todos</option></select></div>
+        <div class="field"><label for="fEmiDe">Emissão da NF – de</label><input id="fEmiDe" type="date"></div>
+        <div class="field"><label for="fEmiAte">até</label><input id="fEmiAte" type="date"></div>
+        <div class="field"><label for="fMes">Mês da remessa</label><input id="fMes" type="month"></div>
+        <div class="field grow"><label for="fBusca">Buscar</label><input id="fBusca" type="search" placeholder="Remessa, aplicação, chave…"></div>
+        <div class="field"><span style="font-size:12px">&nbsp;</span><button class="btn" type="button" id="btnLimparFiltros">Limpar filtros</button></div>
       </div>
       <div class="tbl-wrap"><table id="tblLanc"></table></div>
     </div>
@@ -336,8 +342,8 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
 
         <div class="field"><label for="lFornec" id="lFornecLabel">Fornecedor</label><input id="lFornec" autocomplete="off" list="fornLancList"></div>
         <datalist id="fornLancList"></datalist>
-        <div class="field" data-only="concreto"><label for="lRemessa">Simples remessa</label><input id="lRemessa" inputmode="numeric" autocomplete="off"></div>
-        <div class="field" data-only="concreto"><label for="lDataNF">Data da NF</label><input id="lDataNF" type="date"></div>
+        <div class="field" data-only="concreto"><label for="lRemessa">Nº da simples remessa</label><input id="lRemessa" inputmode="numeric" autocomplete="off"></div>
+        <div class="field" data-only="concreto"><label for="lDataNF">Data de emissão da NF</label><input id="lDataNF" type="date"></div>
         <div class="field" data-only="frete aco"><label for="lDoc">Documento</label>
           <select id="lDoc"><option>NF-e</option><option>CT-e</option><option>NF remessa</option><option>Recibo</option><option>Outro</option></select></div>
         <div class="field span2" data-only="concreto aco"><label for="lPeca" id="lPecaLabel">Aplicação</label><input id="lPeca" autocomplete="off" placeholder="Ex.: Sapata Ap. 07, Travessa Ap. 05, Laje"></div>
@@ -795,8 +801,8 @@ const LAYOUT = {
   },
   concreto: {
     sub: "Remessas de concreto, peças concretadas e ensaios",
-    head: ["Data", "Obra", "Remessa / NF", "Concreteira", "Peça concretada", "n:fck / traço", "n:Volume", "n:7 dias", "n:28 dias", "n:Valor", ""],
-    row: (l) => `<td class="num">${fmtDate(l.data)}</td><td>${obraCell(l)}</td><td class="num">${l.remessa ? esc(l.remessa) : "—"}<div class="muted" style="font-size:12px">${l.numero ? "NF " + esc(l.numero) : ""}</div></td><td class="trunc">${esc(l.fornecedor || "")}</td><td class="trunc">${l.servico ? `<span class="pill none">Bomba</span> ` : ""}${esc(l.peca || l.descricao || "")}</td><td class="n">${n2(l.fckProjeto) != null ? nf.format(l.fckProjeto) : "—"}${l.traco ? `<div class="muted" style="font-size:12px">${esc(l.traco)}</div>` : ""}</td><td class="n">${l.qtd ? nf.format(l.qtd) + " m³" : l.m3Bombeado ? `<span class="muted">${nf.format(l.m3Bombeado)} m³ bomb.</span>` : "—"}</td><td class="n">${ensCell(l, "d7")}</td><td class="n">${ensCell(l, "d28")}</td><td class="n">${l.valor ? money(l.valor) : "—"}</td>${abrir(l)}`,
+    head: ["Remessa", "Nota fiscal", "Obra", "Concreteira", "Aplicação", "n:fck / traço", "n:Volume", "n:7 dias", "n:28 dias", "n:Valor", ""],
+    row: (l) => `<td class="num"><strong>${l.remessa ? esc(l.remessa) : "—"}</strong><div class="muted" style="font-size:12px">${fmtDate(l.data)}</div></td><td class="num">${l.numero ? "NF " + esc(l.numero) : "—"}<div class="muted" style="font-size:12px">${l.dataNF ? "emitida " + fmtDate(l.dataNF) : ""}</div></td><td>${obraCell(l)}</td><td class="trunc">${esc(l.fornecedor || "")}</td><td class="trunc">${l.servico ? `<span class="pill none">Bomba</span> ` : ""}${esc(l.peca || l.descricao || "")}</td><td class="n">${n2(l.fckProjeto) != null ? nf.format(l.fckProjeto) : "—"}${l.traco ? `<div class="muted" style="font-size:12px">${esc(l.traco)}</div>` : ""}</td><td class="n">${l.qtd ? nf.format(l.qtd) + " m³" : l.m3Bombeado ? `<span class="muted">${nf.format(l.m3Bombeado)} m³ bomb.</span>` : "—"}</td><td class="n">${ensCell(l, "d7")}</td><td class="n">${ensCell(l, "d28")}</td><td class="n">${l.valor ? money(l.valor) : "—"}</td>${abrir(l)}`,
     foot: (ls) => `<td colspan="6">${ls.length} remessa(s)</td><td class="n">${nf.format(ls.reduce((a, l) => a + (Number(l.qtd) || 0), 0))} m³</td><td></td><td></td><td class="n">${money(ls.reduce((a, l) => a + (Number(l.valor) || 0), 0))}</td><td></td>`,
   },
   aco: {
@@ -806,11 +812,34 @@ const LAYOUT = {
     foot: (ls) => `<td colspan="6">${ls.length} nota(s)</td><td class="n">${nf.format(ls.reduce((a, l) => a + (Number(l.qtd) || 0), 0))} kg</td><td class="n">${money(ls.reduce((a, l) => a + (Number(l.valor) || 0), 0))}</td><td></td>`,
   },
 };
+const tipoDe = (l) => {
+  if (l.categoria === "concreto") return l.servico ? "Bombeamento" : n2(l.fckProjeto) != null ? "FCK " + nf.format(l.fckProjeto) + (l.traco ? " · " + l.traco : "") : (l.traco || "Sem FCK");
+  if (l.categoria === "aco") return [l.tipoAco, l.bitola ? "Ø " + String(l.bitola).replace(".", ",") + " mm" : ""].filter(Boolean).join(" · ") || "Sem tipo";
+  return l.descricao || "Sem descrição";
+};
+const emissao = (l) => l.dataNF || l.data || "";
+function fillFiltros() {
+  const ls = lancs.filter((l) => l.categoria === lancCat);
+  const fill = (id, vals, label) => { const el = $("#" + id), cur = el.value; el.innerHTML = `<option value="">${label}</option>` + vals.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join(""); el.value = vals.includes(cur) ? cur : ""; };
+  const forns = []; for (const l of ls) if (l.fornecedor && !forns.some((f) => fornIgual(f, l.fornecedor))) forns.push(l.fornecedor);
+  fill("fForn", forns.sort((a, b) => a.localeCompare(b)), "Todos");
+  const tipos = [...new Set(ls.map(tipoDe))].sort((a, b) => { const na = parseFloat(a.replace(/\D+/, "")) || 999, nb = parseFloat(b.replace(/\D+/, "")) || 999; return na - nb || a.localeCompare(b); });
+  fill("fTipo", tipos, "Todos");
+  $("#fNFList").innerHTML = [...new Set(ls.map((l) => l.numero).filter(Boolean))].sort((a, b) => Number(b) - Number(a)).slice(0, 300).map((v) => `<option value="${esc(v)}">`).join("");
+  $("#fFornLabel").textContent = lancCat === "frete" ? "Transportadora" : lancCat === "concreto" ? "Concreteira" : "Fornecedor";
+  $("#fTipoLabel").textContent = lancCat === "concreto" ? "Tipo de concreto" : lancCat === "aco" ? "Tipo / bitola" : "Material";
+}
 function filteredLancs() {
   const sel = $("#obraGlobal").value, mes = $("#fMes").value, q = $("#fBusca").value.trim().toLowerCase();
+  const nfq = $("#fNF").value.replace(/\D/g, "").replace(/^0+/, ""), forn = $("#fForn").value, tipo = $("#fTipo").value, de = $("#fEmiDe").value, ate = $("#fEmiAte").value;
   return lancs.filter((l) => {
     if (l.categoria !== lancCat) return false;
     if (sel && l.obraId !== sel) return false;
+    if (nfq && String(l.numero || "").replace(/\D/g, "").replace(/^0+/, "") !== nfq) return false;
+    if (forn && !fornIgual(forn, l.fornecedor)) return false;
+    if (tipo && tipoDe(l) !== tipo) return false;
+    if (de && emissao(l) < de) return false;
+    if (ate && emissao(l) > ate) return false;
     if (mes && !(l.data || "").startsWith(mes)) return false;
     if (q) {
       const hay = [l.numero, l.remessa, l.traco, l.fornecedor, l.descricao, l.peca, l.chave, l.obs, l.origem, l.destino, l.bitola, l.tipoAco, obraNome(l.obraId)].join(" ").toLowerCase();
@@ -820,6 +849,7 @@ function filteredLancs() {
   }).sort(sortLanc);
 }
 function renderLancs() {
+  fillFiltros();
   $$("#segLanc button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.cat === lancCat)));
   const L = LAYOUT[lancCat];
   $("#lancSub").textContent = L.sub;
@@ -833,7 +863,7 @@ function renderLancs() {
   t.innerHTML = `<thead><tr>${head}</tr></thead><tbody>${ls.map((l) => `<tr>${L.row(l)}</tr>`).join("")}</tbody><tfoot><tr>${L.foot(ls)}</tr></tfoot>`;
   bindRowClicks(t);
 }
-$$("#segLanc button").forEach((b) => (b.onclick = () => { lancCat = b.dataset.cat; try { localStorage.setItem("lancCat", lancCat); } catch {} renderLancs(); }));
+$$("#segLanc button").forEach((b) => (b.onclick = () => { lancCat = b.dataset.cat; $("#fForn").value = ""; $("#fTipo").value = ""; $("#fNF").value = ""; try { localStorage.setItem("lancCat", lancCat); } catch {} renderLancs(); }));
 async function copiarCsv() {
   const ls = filteredLancs();
   const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -842,7 +872,7 @@ async function copiarCsv() {
   const bv = (l) => [fmtDate(l.data), obraNome(l.obraId), l.doc, l.numero, l.chave, l.fornecedor];
   const spec = {
     frete: [["Material", "Viagens", "KM", "Origem", "Destino", "Valor", "Observação"], (l) => [l.descricao, fmtIn(l.qtd), fmtIn(l.km), l.origem, l.destino, fmtIn(l.valor), l.obs]],
-    concreto: [["Peça", "fck projeto", "fck aplicado", "Volume m³", "CP1 7d", "CP2 7d", "Ruptura 7d", "CP1 28d", "CP2 28d", "Ruptura 28d", "Valor", "Observação"], (l) => [l.peca, fmtIn(l.fckProjeto), fmtIn(l.fckAplicado), fmtIn(l.qtd), e(l, "d7", "cp1"), e(l, "d7", "cp2"), fmtDate((l.ensaios?.d7 || {}).data), e(l, "d28", "cp1"), e(l, "d28", "cp2"), fmtDate((l.ensaios?.d28 || {}).data), fmtIn(l.valor), l.obs]],
+    concreto: [["Remessa", "Data da remessa", "Data de emissão da NF", "Aplicação", "Traço", "fck projeto", "fck aplicado", "Volume m³", "CP1 7d", "CP2 7d", "Ruptura 7d", "CP1 28d", "CP2 28d", "Ruptura 28d", "Valor", "Observação"], (l) => [l.remessa, fmtDate(l.data), fmtDate(l.dataNF), l.peca, l.traco, fmtIn(l.fckProjeto), fmtIn(l.fckAplicado), fmtIn(l.qtd), e(l, "d7", "cp1"), e(l, "d7", "cp2"), fmtDate((l.ensaios?.d7 || {}).data), e(l, "d28", "cp1"), e(l, "d28", "cp2"), fmtDate((l.ensaios?.d28 || {}).data), fmtIn(l.valor), l.obs]],
     aco: [["Tipo", "Bitola mm", "Peça", "Peso kg", "Valor", "Observação"], (l) => [l.tipoAco, fmtIn(l.bitola), l.peca, fmtIn(l.qtd), fmtIn(l.valor), l.obs]],
   }[lancCat];
   const rows = ls.map((l) => [...bv(l), ...spec[1](l)].map(q).join(";"));
@@ -911,7 +941,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") $$(".overl
 let editLanc = null, curCat = "frete", importMeta = null;
 const FORM_TXT = {
   frete: { forn: "Transportadora", qtd: "Viagens", num: "Número do CT-e / NF", data: "Data *", valor: "Valor do frete (R$) *" },
-  concreto: { forn: "Concreteira *", qtd: "", num: "Número da NF", data: "Data da concretagem *", valor: "" },
+  concreto: { forn: "Concreteira *", qtd: "", num: "Número da NF", data: "Data da remessa (concretagem) *", valor: "" },
   aco: { forn: "Fornecedor do aço", qtd: "Peso (kg)", num: "Número da NF", data: "Data *", valor: "Valor (R$)" },
 };
 function setCat(cat) {
@@ -1857,6 +1887,9 @@ async function limparExemplos() {
 /* ---------- Filtros ---------- */
 $("#obraGlobal").onchange = () => { renderPainel(); renderLancs(); };
 $("#fMes").onchange = renderLancs;
+["fForn", "fTipo", "fEmiDe", "fEmiAte"].forEach((id) => ($("#" + id).onchange = renderLancs));
+$("#fNF").oninput = renderLancs;
+$("#btnLimparFiltros").onclick = () => { ["fNF", "fEmiDe", "fEmiAte", "fMes", "fBusca"].forEach((id) => ($("#" + id).value = "")); $("#fForn").value = ""; $("#fTipo").value = ""; renderLancs(); };
 $("#fBusca").oninput = renderLancs;
 $("#btnCsv").onclick = copiarCsv;
 
