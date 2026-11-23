@@ -650,7 +650,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 19h15</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 19h30</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -690,7 +690,7 @@ const fmtDate = (d) => d ? d.split("-").reverse().join("/") : "";
 const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
 const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
 
-let db = null, sample = null;
+let db = null, sample = null, sbClient = null, nfesExtrasCache = [];
 let obras = [], lancs = [], orc = {}, precos = [], reidi = {}, notasNFe = [], orcVersionLoaded = false;
 let loaded = { obras: false, lancs: false };
 let resumoCat = "frete";
@@ -1334,7 +1334,10 @@ function rateioPadrao(nfs) {
   const tot = parseNum($("#lValor").value), q = Math.round(parseNum($("#lQtd").value)) || 0, k = nfs.length;
   const vb = Math.floor((tot / k) * 100) / 100, qb = Math.floor(q / k);
   rateio = {};
-  nfs.forEach((x, i) => { rateio[x.n] = { v: i === k - 1 ? Math.round((tot - vb * (k - 1)) * 100) / 100 : vb, q: qb + (i < q - qb * k ? 1 : 0) }; });
+  const nfLib = (n) => notasNFe.concat(nfesExtrasCache).find((y) => String(Number(y.numero)) === n);
+  const qLib = nfs.map((x) => { const y = nfLib(x.n); return y ? matQtdDeItens(y.itens).qtd : null; });
+  const usaLib = qLib.every((v) => v != null && v > 0) && (!q || qLib.reduce((a, b) => a + b, 0) === q);
+  nfs.forEach((x, i) => { rateio[x.n] = { v: i === k - 1 ? Math.round((tot - vb * (k - 1)) * 100) / 100 : vb, q: usaLib ? qLib[i] : qb + (i < q - qb * k ? 1 : 0) }; });
 }
 function rateioAtivo() { return curCat === "frete" && nfsDoForm().length >= 2; }
 function renderChavesNFe() {
@@ -1342,7 +1345,9 @@ function renderChavesNFe() {
   if (multi && (!rateioManual || nfs.some((x) => !rateio[x.n]))) rateioPadrao(nfs);
   const tot = parseNum($("#lValor").value), q = parseNum($("#lQtd").value);
   const sv = nfs.reduce((a, x) => a + ((rateio[x.n] || {}).v || 0), 0), sq = nfs.reduce((a, x) => a + ((rateio[x.n] || {}).q || 0), 0);
-  $("#listaChavesNFe").innerHTML = (nfs.length ? (multi ? `<div class="muted" style="font-size:12px;display:flex;justify-content:space-between;gap:8px;align-items:center"><span>Ao salvar, vira <b>um lançamento por NF</b> com a quantidade e o valor abaixo.</span><button type="button" class="btn" id="btnRateioIgual">Dividir igualmente</button></div>` : "") +
+  const faltamLib = nfs.filter((x) => x.chave && !notasNFe.concat(nfesExtrasCache).some((y) => y.chave === x.chave));
+  const btnBusca = sbClient && faltamLib.length ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn primary" id="btnBuscarMD">Buscar ${faltamLib.length > 1 ? faltamLib.length + " NF-e" : "NF-e"} no Meu Danfe</button><span class="muted" style="font-size:12px">R$ 0,03 por nota nova · notas já buscadas não são cobradas</span></div>` : "";
+  $("#listaChavesNFe").innerHTML = btnBusca + (nfs.length ? (multi ? `<div class="muted" style="font-size:12px;display:flex;justify-content:space-between;gap:8px;align-items:center"><span>Ao salvar, vira <b>um lançamento por NF</b> com a quantidade e o valor abaixo.</span><button type="button" class="btn" id="btnRateioIgual">Dividir igualmente</button></div>` : "") +
     nfs.map((x) => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pill none" style="min-width:86px;justify-content:center">NF ${esc(x.n)}</span>` +
       `<span class="mono" style="flex:1;min-width:160px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.chave ? x.chave.replace(/(\d{4})(?=\d)/g, "$1 ") : '<span class="muted">sem chave</span>'}</span>` +
       (x.chave ? `<button type="button" class="btn" data-copiar-chave="${x.chave}">Copiar</button>` : "") +
@@ -1362,6 +1367,45 @@ $("#listaChavesNFe").addEventListener("input", (e) => {
   somaRateio();
 });
 $("#listaChavesNFe").addEventListener("click", (e) => { if (e.target.id === "btnRateioIgual") { rateioManual = false; renderChavesNFe(); } });
+async function buscarNoMeuDanfe(btn) {
+  const chs = nfsDoForm().filter((x) => x.chave && !notasNFe.concat(nfesExtrasCache).some((y) => y.chave === x.chave)).map((x) => x.chave);
+  if (!chs.length || !sbClient) return;
+  btn.disabled = true; btn.textContent = `Buscando ${chs.length} NF-e…`;
+  setImp(`Buscando ${chs.length} NF-e no Meu Danfe… pode levar alguns segundos por nota.`);
+  try {
+    const res = [];
+    for (let i = 0; i < chs.length; i += 10) {
+      const { data, error } = await sbClient.functions.invoke("meudanfe", { body: { chaves: chs.slice(i, i + 10) } });
+      if (error) throw error;
+      if (data && data.erro) throw new Error(data.erro);
+      res.push(...((data && data.resultados) || []));
+    }
+    const nfes = [], falhas = [];
+    for (const r of res) {
+      const p = r.ok && r.xml ? parseXmlNota(r.xml) : null;
+      if (p && p.tipoDocumento === "NF-e") nfes.push(resumoNFe(p)); else falhas.push(`${Number(String(r.chave).slice(25, 34))} (${r.status || "sem XML"})`);
+    }
+    if (nfes.length) {
+      await guardarNFes(nfes); nfesExtrasCache = nfesExtrasCache.concat(nfes);
+      rateio = {}; rateioManual = false;
+      if (ultimoCte) applyFrete(ultimoCte, nfesExtrasCache);
+      else {
+        const todas = nfsDoForm().map((x) => notasNFe.concat(nfesExtrasCache).find((y) => y.chave === x.chave)).filter(Boolean);
+        const mq = matQtdDeItens(todas.flatMap((n) => n.itens || []), materialDeNFes(todas));
+        $("#lMat").value = mq.mat; if (mq.qtd) $("#lQtd").value = fmtIn(mq.qtd);
+        const km = todas.map((n) => n.km).find(Boolean); const o = km ? obraMaisProxima(km) : null; if (o) $("#lObra").value = o.id;
+        renderChavesNFe();
+      }
+    }
+    const m = `${nfes.length} NF-e encontrada(s) no Meu Danfe.` + (falhas.length ? ` Não retornaram: ${falhas.join(", ")}. Tente de novo mais tarde (não insista várias vezes seguidas na mesma chave).` : "");
+    setImp((ultimoCte && nfes.length ? $("#importStatus").textContent + " " : "") + m, falhas.length ? "warn" : "ok");
+  } catch (err) {
+    console.error(err);
+    const t = String((err && (err.message || err.context?.statusText)) || err);
+    setImp(/Failed to send|not found|404/i.test(t) ? "A função \"meudanfe\" ainda não foi instalada no Supabase." : "Não consegui buscar no Meu Danfe: " + t, "err");
+  } finally { btn.disabled = false; renderChavesNFe(); }
+}
+$("#listaChavesNFe").addEventListener("click", (e) => { if (e.target.id === "btnBuscarMD") buscarNoMeuDanfe(e.target); });
 ["#lNFsT", "#lValor", "#lQtd"].forEach((id) => $(id).addEventListener("input", () => { if (!rateioManual || id === "#lNFsT") renderChavesNFe(); else somaRateio(); }));
 $("#lChaveNFe").addEventListener("input", renderChavesNFe);
 document.addEventListener("click", async (e) => {
@@ -2767,7 +2811,7 @@ function supaDb(sb, uid) {
 async function iniciarSupabase() {
   const lib = await loadScript("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js").then(() => window.supabase).catch(() => null);
   if (!lib) { dbState = "sem-acesso"; loaded = { obras: true, lancs: true }; renderAll(); return; }
-  const sb = lib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const sb = lib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); sbClient = sb;
   let conectado = false;
   const entrar = (session) => {
     if (conectado || !session) return;
