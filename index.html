@@ -870,9 +870,9 @@ function updPrecoHint() {
   $("#btnUsarPreco").hidden = false;
   box.hidden = false;
   const un = esc(UNID[c.preco.unidade] || c.preco.unidade);
+  const rd = c.pct || c.bpct ? ` − REIDI${c.pct && c.bpct ? " " + nf.format(c.pct) + "%" : c.pct ? " " + nf.format(c.pct) + "% (só no concreto)" : " " + nf.format(c.bpct) + "% (só na bomba)"} = <strong>${money(c.unitLiq + c.bunitLiq)}/${un}</strong>` : "";
   const bom = c.bunit ? ` + bomba ${money(c.bunit)}/m³` : "";
-  const rd = c.pct ? ` − REIDI ${nf.format(c.pct)}% = <strong>${money(c.unitLiq + c.bunitLiq)}/${un}</strong>` : "";
-  $("#precoHintTxt").innerHTML = `Preço negociado: ${c.pct ? "" : "<strong>"}${money(c.unit)}/${un}${c.pct ? "" : "</strong>"}${bom}${rd} (${esc(c.preco.fornecedor)}, desde ${fmtDate(c.vig.inicio)}) → <strong>${money(c.valor)}</strong>${c.pct ? ` <span class="muted">(sem REIDI ${money(c.valorBruto)})</span>` : ""}`;
+  $("#precoHintTxt").innerHTML = `Preço negociado: ${c.pct || c.bpct ? "" : "<strong>"}${money(c.unit)}/${un}${c.pct || c.bpct ? "" : "</strong>"}${bom}${rd} (${esc(c.preco.fornecedor)}, desde ${fmtDate(c.vig.inicio)}) → <strong>${money(c.valor)}</strong>${c.pct || c.bpct ? ` <span class="muted">(sem REIDI ${money(c.valorBruto)})</span>` : ""}`;
   $("#btnUsarPreco").onclick = () => { $("#lValor").value = fmtIn(c.valor); };
 }
 function updEns() {
@@ -1317,9 +1317,11 @@ function calcValor(l, lista = precos) {
     bomba = lista.find((x) => x.categoria === "concreto" && x.servico === "bomba-" + l.bomba && (!x.fornecedor || fornIgual(x.fornecedor, l.fornecedor)) && vigente(x, l.data)) || null;
     if (bomba) bunit = Number(vigente(bomba, l.data).valor) || 0;
   }
-  const pct = reidiPct(p.fornecedor || l.fornecedor);
-  const uL = comReidi(v.valor, pct), bL = comReidi(bunit, pct);
-  return { preco: p, vig: v, unit: Number(v.valor), bomba, bunit, pct, unitLiq: uL, bunitLiq: bL, valorBruto: Math.round(base * (Number(v.valor) + bunit) * 100) / 100, valor: Math.round(base * (uL + bL) * 100) / 100 };
+  const fp = reidiPct(p.fornecedor || l.fornecedor);
+  const pct = p.semReidi ? 0 : fp;
+  const bpct = bomba && !bomba.semReidi ? reidiPct(bomba.fornecedor || l.fornecedor) : 0;
+  const uL = comReidi(v.valor, pct), bL = comReidi(bunit, bpct);
+  return { preco: p, vig: v, unit: Number(v.valor), bomba, bunit, pct, bpct, unitLiq: uL, bunitLiq: bL, valorBruto: Math.round(base * (Number(v.valor) + bunit) * 100) / 100, valor: Math.round(base * (uL + bL) * 100) / 100 };
 }
 function itemTxt(p) {
   if (p.categoria === "concreto" && p.servico) return [SERV_TXT[p.servico] || "Serviço", p.descricao].filter(Boolean).join(" · ");
@@ -1360,17 +1362,32 @@ function renderPrecos() {
   const t = $("#tblPrecos");
   const ps = precos.filter((p) => p.categoria === precoCat).sort((a, b) => (a.fornecedor || "").localeCompare(b.fornecedor || "") || (Number(a.fck) || 0) - (Number(b.fck) || 0) || (Number(a.bitola) || 0) - (Number(b.bitola) || 0));
   if (!ps.length) { t.innerHTML = `<tbody><tr><td class="empty">Nenhum preço de ${CATS[precoCat].nome.toLowerCase()} cadastrado. Clique em "+ Novo preço".</td></tr></tbody>`; return; }
-  t.innerHTML = `<thead><tr><th>${precoCat === "frete" ? "Transportadora" : precoCat === "concreto" ? "Concreteira" : "Fornecedor"}</th><th>Item</th><th class="n">Preço atual</th><th class="n">Com REIDI</th><th>Vigente desde</th><th>Histórico</th><th class="n">Lançamentos</th><th><span class="sr">Ações</span></th></tr></thead><tbody>` +
+  t.innerHTML = `<thead><tr><th>${precoCat === "frete" ? "Transportadora" : precoCat === "concreto" ? "Concreteira" : "Fornecedor"}</th><th>Item</th><th class="n">Preço atual</th><th>REIDI</th><th class="n">Com REIDI</th><th>Vigente desde</th><th>Histórico</th><th class="n">Lançamentos</th><th><span class="sr">Ações</span></th></tr></thead><tbody>` +
     ps.map((p) => {
       const a = atual(p), vs = (p.vigencias || []).slice().sort((x, y) => y.inicio.localeCompare(x.inicio));
       const ant = vs[1];
       const usados = lancs.filter((l) => l.precoId === p.id).length;
       const hist = vs.length > 1 ? `${vs.length - 1} reajuste(s) · antes ${money(ant.valor)}${ant.valor ? ` <span class="${a.valor >= ant.valor ? "" : ""}muted">(${a.valor >= ant.valor ? "+" : ""}${nf.format(((a.valor - ant.valor) / ant.valor) * 100)}%)</span>` : ""}` : `<span class="muted">Sem reajustes</span>`;
-      return `<tr><td><strong>${esc(p.fornecedor || "Qualquer fornecedor")}</strong></td><td>${esc(itemTxt(p))}</td><td class="n"><strong>${a ? money(a.valor) : "—"}</strong> <span class="muted">/${esc(UNID[p.unidade] || p.unidade)}</span></td><td class="n">${a && reidiPct(p.fornecedor) ? `${money(comReidi(a.valor, reidiPct(p.fornecedor)))} <span class="muted">(−${nf.format(reidiPct(p.fornecedor))}%)</span>` : `<span class="muted">—</span>`}</td><td class="num">${a ? fmtDate(a.inicio) : "—"}</td><td style="font-size:13px">${hist}</td><td class="n">${usados}</td>
+      return `<tr><td><strong>${esc(p.fornecedor || "Qualquer fornecedor")}</strong></td><td>${esc(itemTxt(p))}</td><td class="n"><strong>${a ? money(a.valor) : "—"}</strong> <span class="muted">/${esc(UNID[p.unidade] || p.unidade)}</span></td><td><label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;font-size:13px;white-space:nowrap"><input type="checkbox" data-rdchk="${esc(p.id)}" ${p.semReidi ? "" : "checked"}> ${p.semReidi ? "Não entra" : "Entra"}</label></td><td class="n">${a && !p.semReidi && reidiPct(p.fornecedor) ? `${money(comReidi(a.valor, reidiPct(p.fornecedor)))} <span class="muted">(−${nf.format(reidiPct(p.fornecedor))}%)</span>` : `<span class="muted">—</span>`}</td><td class="num">${a ? fmtDate(a.inicio) : "—"}</td><td style="font-size:13px">${hist}</td><td class="n">${usados}</td>
         <td style="white-space:nowrap"><button class="btn small" type="button" data-rp="${esc(p.id)}">Reajustar</button> <button class="btn small ghost" type="button" data-ep="${esc(p.id)}">Editar</button></td></tr>`;
     }).join("") + `</tbody>`;
   $$("[data-rp]", t).forEach((b) => (b.onclick = () => openReajPreco(precos.find((p) => p.id === b.dataset.rp))));
   $$("[data-ep]", t).forEach((b) => (b.onclick = () => openPreco(precos.find((p) => p.id === b.dataset.ep))));
+  $$("[data-rdchk]", t).forEach((cb) => (cb.onchange = async () => {
+    const id = cb.dataset.rdchk, sem = !cb.checked;
+    cb.disabled = true;
+    try {
+      await db.collection("precos").doc(id).update({ semReidi: sem });
+      const lista = precos.map((x) => (x.id === id ? { ...x, semReidi: sem } : x));
+      let n = 0;
+      for (const l of lancs.filter((x) => x.valorCalculado)) {
+        const c = calcValor(l, lista); if (!c || c.valor === Number(l.valor)) continue;
+        await db.collection("lancamentos").doc(l.id).update({ valor: c.valor, atualizadoEm: Date.now() }); n++;
+      }
+      toast(`${sem ? "Item sem REIDI" : "Item com REIDI"}${n ? `; ${n} lançamento(s) recalculado(s)` : ""}.`);
+    } catch (err) { toast(dbErr(err)); cb.checked = !cb.checked; }
+    finally { cb.disabled = false; }
+  }));
 }
 $$("#segPreco button").forEach((b) => (b.onclick = () => { precoCat = b.dataset.cat; renderPrecos(); }));
 function setPFormCat(cat) {
