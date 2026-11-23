@@ -410,6 +410,9 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
               <tr data-v="he"><td>Adicional de horas extras</td><td class="n" id="vHeQ"></td><td class="n"><input id="uHe" inputmode="decimal" autocomplete="off" aria-label="Unitário HE"></td><td class="n" id="vHeT"></td></tr>
               <tr data-v="perm"><td>Adicional de permanência</td><td class="n" id="vPermQ"></td><td class="n"><input id="uPerm" inputmode="decimal" autocomplete="off" aria-label="Unitário permanência"></td><td class="n" id="vPermT"></td></tr>
               <tr data-v="dev"><td>Adicional de devolução</td><td class="n" id="vDevQ"></td><td class="n"><input id="uDev" inputmode="decimal" autocomplete="off" aria-label="Unitário devolução"></td><td class="n" id="vDevT"></td></tr>
+              <tr data-v="sub" style="font-weight:600"><td colspan="3">Subtotal</td><td class="n" id="vSubT"></td></tr>
+              <tr data-v="reidi"><td id="vReidiLbl">Desconto REIDI</td><td class="n" id="vReidiQ"></td><td class="n" id="vReidiU"></td><td class="n" id="vReidiT" style="color:var(--ok)"></td></tr>
+              <tr data-v="desc"><td>Outro desconto</td><td class="n"><input id="dPct" inputmode="decimal" autocomplete="off" placeholder="%" aria-label="Desconto em %" style="width:70px"></td><td class="n"><input id="dVal" inputmode="decimal" autocomplete="off" placeholder="R$" aria-label="Desconto em R$"></td><td class="n" id="vDescT" style="color:var(--ok)"></td></tr>
             </tbody>
             <tfoot><tr><td colspan="3">Valor total faturado</td><td class="n" id="vTotal">R$ 0,00</td></tr></tfoot>
           </table></div>
@@ -612,7 +615,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 14h30</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 15h20</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -1001,7 +1004,7 @@ function formLancLike() {
   return { ...base, precoId: p ? p.id : null, servico: p && p.servico ? p.servico : "", qtd: p && p.servico ? 0 : m3, m3Bombeado: p && p.servico ? m3 : 0,
     extras: { m3Faltante: numOrNull("cFaltQ"), nfFaltante: $("#cFaltNF").value.trim(), he: numOrNull("cHeQ"), heNF: $("#cHeNF").value.trim(),
       permanenciaH: numOrNull("cPermQ"), permanenciaNF: $("#cPermNF").value.trim(), devolucaoM3: numOrNull("cDevQ"), devolucaoNF: $("#cDevNF").value.trim() },
-    unitManual: um };
+    unitManual: um, desconto: { pct: numOrNull("dPct"), valor: numOrNull("dVal") } };
 }
 function tiposConcreto(forn) {
   return precos.filter((p) => p.categoria === "concreto" && (!forn || !p.fornecedor || fornIgual(p.fornecedor, forn)) && (!p.servico || ["bomba-mangote", "bomba-lanca", "minimo"].includes(p.servico)))
@@ -1029,7 +1032,7 @@ function updConcreto() {
   $("#cM3Label").textContent = bomba ? "M³ bombeados *" : "Quant. realizada (m³) *";
   $("#vConcLbl").textContent = bomba ? (SERV_TXT[p.servico] || "Bombeamento") : "Concreto";
   const c = calcConcreto(l);
-  setUnit("uConc", c.u.conc); setUnit("uFalt", c.u.falt); setUnit("uHe", c.u.he); setUnit("uPerm", c.u.perm); setUnit("uDev", c.u.dev);
+  setUnit("uConc", c.u.concCheio != null ? c.u.concCheio : c.u.conc); setUnit("uFalt", c.u.falt); setUnit("uHe", c.u.he); setUnit("uPerm", c.u.perm); setUnit("uDev", c.u.dev);
   const c2 = calcConcreto(formLancLike());
   const linhas = { conc: ["vConcQ", "vConcT"], falt: ["vFaltQ", "vFaltT"], he: ["vHeQ", "vHeT"], perm: ["vPermQ", "vPermT"], dev: ["vDevQ", "vDevT"] };
   for (const [k, [q, t]] of Object.entries(linhas)) {
@@ -1038,14 +1041,24 @@ function updConcreto() {
     $("#" + t).textContent = ln.q ? money(ln.total) : "—";
     $("#" + q).closest("tr").classList.toggle("off", !ln.q);
   }
+  $("#vSubT").textContent = money(c2.subtotal);
+  const rd = c2.linhas.reidi;
+  $("#vReidiLbl").textContent = rd.total ? `Desconto REIDI (${nf.format(rd.pct)}% no concreto)` : "Desconto REIDI";
+  $("#vReidiQ").textContent = rd.total ? nf.format(rd.q) + " m³" : "—";
+  $("#vReidiU").textContent = rd.total ? money(rd.unit) : "—";
+  $("#vReidiT").textContent = rd.total ? money(rd.total) : "—";
+  $("#vReidiT").closest("tr").classList.toggle("off", !rd.total);
+  $("#vDescT").textContent = c2.linhas.desc.total ? money(c2.linhas.desc.total) : "—";
   $("#vTotal").textContent = money(c2.total);
   const info = [];
-  if (c2.vig) info.push(`Preço do contrato ${money(c2.vig.valor)}/${UNID[c2.preco.unidade] || "m³"} desde ${fmtDate(c2.vig.inicio)}` + (c2.pct ? `, com REIDI ${nf.format(c2.pct)}% = ${money(c2.u.conc)}` : ", sem REIDI"));
+  if (c2.vig && c2.u.concCheio != null) info.push(`Preço do contrato ${money(c2.vig.valor)}/${UNID[c2.preco.unidade] || "m³"} desde ${fmtDate(c2.vig.inicio)}` + (c2.pct ? ` (com REIDI fica ${money(c2.u.conc)}/m³)` : ", item sem REIDI") + ".");
+  else if ($("#uConc").dataset.manual === "1" || (l.unitManual && l.unitManual.conc != null)) info.push("Unitário do concreto digitado: considerado já com desconto.");
   else if (l.precoId) info.push("Esse tipo não tem preço vigente na data da concretagem.");
   else info.push("Escolha o tipo do concreto para puxar o preço do contrato, ou digite o unitário.");
   info.push("HE = 50% do unitário do concreto. Os unitários podem ser alterados.");
   $("#vInfo").textContent = info.join(" ");
 }
+["dPct", "dVal"].forEach((id) => $("#" + id).addEventListener("input", (e) => { if (e.target.value.trim()) $("#" + (id === "dPct" ? "dVal" : "dPct")).value = ""; updConcreto(); }));
 ["uConc", "uFalt", "uHe", "uPerm", "uDev"].forEach((id) => $("#" + id).addEventListener("input", (e) => { e.target.dataset.manual = e.target.value.trim() ? "1" : ""; updConcreto(); }));
 ["lFornec", "lData"].forEach((id) => { $("#" + id).addEventListener("change", () => { if (curCat === "concreto") { fillTraco(); updConcreto(); } }); });
 $("#lFckP").addEventListener("change", () => { if (curCat === "concreto") { fillTraco(); updConcreto(); } });
@@ -1105,6 +1118,7 @@ function openLanc(l, cat) {
   $("#cPermQ").value = fmtIn(ex.permanenciaH); $("#cPermNF").value = ex.permanenciaNF || "";
   $("#cDevQ").value = fmtIn(ex.devolucaoM3); $("#cDevNF").value = ex.devolucaoNF || "";
   [["conc", "uConc"], ["falt", "uFalt"], ["he", "uHe"], ["perm", "uPerm"], ["dev", "uDev"]].forEach(([k, id]) => { const el = $("#" + id); el.dataset.manual = um[k] != null ? "1" : ""; el.value = um[k] != null ? fmtIn(um[k]) : ""; });
+  const dsc = (l && l.desconto) || {}; $("#dPct").value = fmtIn(dsc.pct); $("#dVal").value = fmtIn(dsc.valor);
   $("#lTipoAco").value = v("tipoAco", "CA-50"); $("#lBitola").value = l && l.bitola ? String(l.bitola).replace(".", ",") : "";
   $("#lQtd").value = l ? fmtIn(l.qtd) : ""; $("#lValor").value = l ? fmtIn(l.valor) : "";
   $("#lKm").value = l ? fmtIn(l.km) : ""; $("#lOrig").value = v("origem"); $("#lDest").value = v("destino"); $("#lObs").value = v("obs");
@@ -1169,8 +1183,8 @@ $("#formLanc").addEventListener("submit", async (e) => {
     ...(curCat === "concreto" ? {
       remessa: $("#lRemessa").value.trim(), traco: $("#lTracoCod").value.trim(), dataNF: $("#lDataNF").value || "",
       fckProjeto: $("#lFckP").value ? parseNum($("#lFckP").value) : null,
-      ...(() => { const fl = formLancLike(); return { qtd: fl.qtd, m3Bombeado: fl.m3Bombeado, servico: fl.servico, extras: fl.extras, unitManual: fl.unitManual,
-        valorUnit: concCalc.u.conc, valorConcreto: concCalc.linhas.conc.total, valoresLinhas: Object.fromEntries(Object.entries(concCalc.linhas).map(([k, v]) => [k, { q: v.q, unit: v.unit, total: v.total }])) }; })(),
+      ...(() => { const fl = formLancLike(); return { qtd: fl.qtd, m3Bombeado: fl.m3Bombeado, servico: fl.servico, extras: fl.extras, unitManual: fl.unitManual, desconto: fl.desconto, subtotal: concCalc.subtotal,
+        valorUnit: concCalc.u.conc, valoresLinhas: Object.fromEntries(Object.entries(concCalc.linhas).map(([k, v]) => [k, { q: v.q, unit: v.unit, total: v.total }])), valorConcreto: concCalc.linhas.conc.total + concCalc.linhas.reidi.total }; })(),
       ensaios: {
         d7: { cp1: $("#e7a").value ? parseNum($("#e7a").value) : null, cp2: $("#e7b").value ? parseNum($("#e7b").value) : null, data: $("#e7d").value || "" },
         d14: { cp1: $("#e14a").value ? parseNum($("#e14a").value) : null, cp2: $("#e14b").value ? parseNum($("#e14b").value) : null, data: $("#e14d").value || "" },
@@ -1757,7 +1771,7 @@ $("#btnLoteSalvar").onclick = async () => {
             ...base, obraId: L.obraId || "", doc: "NF-e", numero: nfNum, dataNF: nfData, remessa: L.remessa, chave: L.chave || "", peca: L.peca || "", traco: L.traco || "",
             servico: p && p.servico ? p.servico : "", unidade: "m³", descricao: "", obs: L.lacre ? "Lacre " + L.lacre : "",
             ensaios: { d7: { cp1: null, cp2: null, data: "" }, d14: { cp1: null, cp2: null, data: "" }, d28: { cp1: null, cp2: null, data: "" } },
-            valor: c.total, valorCalculado: true, valorUnit: c.u.conc, valorConcreto: c.linhas.conc.total, reidiPct: c.pct,
+            valor: c.total, valorCalculado: true, valorUnit: c.u.conc, valorConcreto: c.linhas.conc.total + c.linhas.reidi.total, subtotal: c.subtotal, reidiPct: c.pct,
             valoresLinhas: Object.fromEntries(Object.entries(c.linhas).map(([k, v]) => [k, { q: v.q, unit: v.unit, total: v.total }])),
             origemDados: "lote", criadoEm: Date.now(), atualizadoEm: Date.now(),
           }); novos++;
@@ -1963,9 +1977,24 @@ function calcConcreto(l, lista = precos) {
     dev: um.dev != null ? um.dev : unitServ(l, "devolucao", lista, 300),
   };
   const q = { conc: (p && p.servico ? Number(l.m3Bombeado) : Number(l.qtd)) || 0, falt: Number(ex.m3Faltante) || 0, he: Number(ex.he) || 0, perm: Number(ex.permanenciaH) || 0, dev: Number(ex.devolucaoM3) || 0 };
-  const linhas = {}; let total = 0;
-  for (const k of Object.keys(q)) { const t = Math.round(q[k] * (Number(u[k]) || 0) * 100) / 100; linhas[k] = { q: q[k], unit: u[k], total: t }; total += t; }
-  return { preco: p, vig, pct, u, linhas, total: Math.round(total * 100) / 100, unit: vig ? Number(vig.valor) : null, valor: Math.round(total * 100) / 100 };
+  const r2 = (v) => Math.round(v * 100) / 100;
+  // concreto pelo preço cheio do contrato; o REIDI vira uma linha de desconto no final
+  const cheio = um.conc == null && vig ? Number(vig.valor) : null;
+  u.concCheio = cheio;
+  const linhas = {}; let sub = 0;
+  for (const k of Object.keys(q)) {
+    const un = k === "conc" && cheio != null ? cheio : u[k];
+    const t = r2(q[k] * (Number(un) || 0)); linhas[k] = { q: q[k], unit: un, total: t }; sub += t;
+  }
+  sub = r2(sub);
+  const reidiUnit = cheio != null && pct ? r2(cheio - conc) : 0;
+  linhas.reidi = { q: reidiUnit ? q.conc : 0, unit: reidiUnit ? -reidiUnit : 0, total: reidiUnit ? -r2(q.conc * reidiUnit) : 0, pct: reidiUnit ? pct : 0 };
+  const d = l.desconto || {};
+  const base = r2(sub + linhas.reidi.total);
+  const dv = Number(d.valor) > 0 ? r2(Number(d.valor)) : Number(d.pct) > 0 ? r2(base * Number(d.pct) / 100) : 0;
+  linhas.desc = { q: 0, unit: null, total: -dv, pct: Number(d.pct) || 0 };
+  const total = r2(base - dv);
+  return { preco: p, vig, pct, u, linhas, subtotal: sub, total, unit: vig ? Number(vig.valor) : null, valor: total };
 }
 function calcValor(l, lista = precos) {
   if (l.categoria === "concreto" && (l.extras || l.unitManual || l.m3Bombeado != null)) { const c = calcConcreto(l, lista); return c.preco || (l.unitManual && l.unitManual.conc != null) ? c : null; }
