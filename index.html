@@ -650,7 +650,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 19h00</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 19h15</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -1177,7 +1177,7 @@ function openLanc(l, cat) {
   $("#lMat").value = l && l.categoria === "frete" ? matFrete(l) : "VIGA";
   $("#lNFsT").value = l && l.nfsTransp ? l.nfsTransp.map((n) => n.numero).join(", ") : ""; $("#lPeso").value = l ? fmtIn(l.pesoKg) : "";
   $("#lancMsg").dataset.nfes = l && l.nfsTransp ? JSON.stringify(l.nfsTransp) : "";
-  $("#lChaveNFe").value = l && l.nfsTransp ? l.nfsTransp.map((n) => n.chave).filter(Boolean).join(", ") : ""; renderChavesNFe();
+  $("#lChaveNFe").value = l && l.nfsTransp ? l.nfsTransp.map((n) => n.chave).filter(Boolean).join(", ") : ""; rateio = {}; rateioManual = false;
   $("#lKm").value = l ? fmtIn(l.km) : ""; $("#lOrig").value = v("origem"); $("#lDest").value = v("destino"); $("#lObs").value = v("obs");
   $("#e7a").value = fmtIn((ens.d7 || {}).cp1); $("#e7b").value = fmtIn((ens.d7 || {}).cp2); $("#e7d").value = (ens.d7 || {}).data || "";
   $("#e14a").value = fmtIn((ens.d14 || {}).cp1); $("#e14b").value = fmtIn((ens.d14 || {}).cp2); $("#e14d").value = (ens.d14 || {}).data || "";
@@ -1188,6 +1188,7 @@ function openLanc(l, cat) {
   setCat(c);
   $("#fileNota").value = ""; ultimoCte = null; $("#nfeFalta").hidden = true; $("#nfeFalta").style.display = "none";
   if (c === "concreto") { fillTraco(l ? l.precoId || "" : ""); updConcreto(); }
+  renderChavesNFe();
   updPrecoHint();
   openModal("mLanc");
 }
@@ -1267,7 +1268,27 @@ $("#formLanc").addEventListener("submit", async (e) => {
   };
   if (editLanc && editLanc.exemplo) data.exemplo = true;
   if (editLanc && editLanc.importKey) data.importKey = editLanc.importKey;
-  const btn = $("#btnSalvarLanc"); btn.disabled = true;
+  const btn = $("#btnSalvarLanc");
+  if (curCat === "frete" && (data.nfsTransp || []).length >= 2) {
+    const { sv, sq, tot, q } = somaRateio();
+    if (Math.abs(sv - tot) > 0.009) { msg.className = "status err"; msg.textContent = `A soma dos valores por NF (${money(sv)}) tem que ser igual ao valor do frete (${money(tot)}).`; return; }
+    if (q && sq !== q) { msg.className = "status err"; msg.textContent = `A soma das peças por NF (${nf0.format(sq)}) tem que ser igual à quantidade (${nf0.format(q)}).`; return; }
+    btn.disabled = true;
+    try {
+      const k = data.nfsTransp.length, base = Date.now();
+      const docs = data.nfsTransp.map((nf, i) => {
+        const r = rateio[String(Number(nf.numero))] || { q: 0, v: 0 };
+        return { ...data, nfsTransp: [nf], qtd: r.q, valor: r.v, criadoEm: (data.criadoEm || base) + i, rateio: { cte: data.numero, parte: i + 1, de: k, valorTotal: tot, qtdTotal: q || null },
+          obs: [data.obs, `Rateio do CT-e ${data.numero || "?"}: NF ${nf.numero} (${i + 1} de ${k}) · total ${money(tot)}`].filter(Boolean).join(" | ") };
+      });
+      const run = async () => { for (const [i, d] of docs.entries()) await (i === 0 && editLanc ? db.collection("lancamentos").doc(editLanc.id) : db.collection("lancamentos").doc()).set(d); };
+      if (db.lote) await db.lote(run); else await run();
+      closeModal("mLanc"); toast(`${k} lançamentos salvos (um por NF).`);
+    } catch (err) { msg.className = "status err"; msg.textContent = dbErr(err); }
+    finally { btn.disabled = false; }
+    return;
+  }
+  btn.disabled = true;
   try {
     const ref = editLanc ? db.collection("lancamentos").doc(editLanc.id) : db.collection("lancamentos").doc();
     await ref.set(data);
@@ -1301,10 +1322,47 @@ document.addEventListener("click", async (e) => {
   try { await navigator.clipboard.writeText(v); toast("Chave copiada. Cole no Meu Danfe."); } catch { prompt("Copie a chave:", v); }
 });
 function chavesNFeDoCampo() { return [...new Set(($("#lChaveNFe").value.match(/\d[\d\s.\-\/]{42,}?\d(?=\D|$)/g) || []).map(onlyDigits).filter((c) => c.length === 44))]; }
-function renderChavesNFe() {
+// Lista de NF do frete: chave + copiar e, com 2 ou mais NF, o rateio (quantidade e valor por NF)
+let rateio = {}, rateioManual = false;
+function nfsDoForm() {
   const cs = chavesNFeDoCampo();
-  $("#listaChavesNFe").innerHTML = cs.map((c) => `<div style="display:flex;gap:8px;align-items:center"><span class="pill none" style="min-width:86px;justify-content:center">NF ${Number(c.slice(25, 34))}</span><span class="mono" style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis">${c.replace(/(\d{4})(?=\d)/g, "$1 ")}</span><button type="button" class="btn" data-copiar-chave="${c}">Copiar</button></div>`).join("");
+  const nums = $("#lNFsT").value.split(/[,;\s]+/).map((x) => x.replace(/\D/g, "")).filter(Boolean).map((x) => String(Number(x)));
+  cs.forEach((c) => { const n = String(Number(c.slice(25, 34))); if (!nums.includes(n)) nums.push(n); });
+  return nums.map((n) => ({ n, chave: cs.find((c) => String(Number(c.slice(25, 34))) === n) || "" }));
 }
+function rateioPadrao(nfs) {
+  const tot = parseNum($("#lValor").value), q = Math.round(parseNum($("#lQtd").value)) || 0, k = nfs.length;
+  const vb = Math.floor((tot / k) * 100) / 100, qb = Math.floor(q / k);
+  rateio = {};
+  nfs.forEach((x, i) => { rateio[x.n] = { v: i === k - 1 ? Math.round((tot - vb * (k - 1)) * 100) / 100 : vb, q: qb + (i < q - qb * k ? 1 : 0) }; });
+}
+function rateioAtivo() { return curCat === "frete" && nfsDoForm().length >= 2; }
+function renderChavesNFe() {
+  const nfs = nfsDoForm(), multi = nfs.length >= 2;
+  if (multi && (!rateioManual || nfs.some((x) => !rateio[x.n]))) rateioPadrao(nfs);
+  const tot = parseNum($("#lValor").value), q = parseNum($("#lQtd").value);
+  const sv = nfs.reduce((a, x) => a + ((rateio[x.n] || {}).v || 0), 0), sq = nfs.reduce((a, x) => a + ((rateio[x.n] || {}).q || 0), 0);
+  $("#listaChavesNFe").innerHTML = (nfs.length ? (multi ? `<div class="muted" style="font-size:12px;display:flex;justify-content:space-between;gap:8px;align-items:center"><span>Ao salvar, vira <b>um lançamento por NF</b> com a quantidade e o valor abaixo.</span><button type="button" class="btn" id="btnRateioIgual">Dividir igualmente</button></div>` : "") +
+    nfs.map((x) => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pill none" style="min-width:86px;justify-content:center">NF ${esc(x.n)}</span>` +
+      `<span class="mono" style="flex:1;min-width:160px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${x.chave ? x.chave.replace(/(\d{4})(?=\d)/g, "$1 ") : '<span class="muted">sem chave</span>'}</span>` +
+      (x.chave ? `<button type="button" class="btn" data-copiar-chave="${x.chave}">Copiar</button>` : "") +
+      (multi ? `<input aria-label="Quantidade da NF ${esc(x.n)}" data-rq="${esc(x.n)}" inputmode="numeric" value="${fmtIn(rateio[x.n].q) || "0"}" style="width:70px" title="Peças"><input aria-label="Valor da NF ${esc(x.n)}" data-rv="${esc(x.n)}" inputmode="decimal" value="${fmtIn(rateio[x.n].v) || "0"}" style="width:120px" title="Valor do frete (R$)">` : "") + `</div>`).join("") +
+    (multi ? `<div class="status ${Math.abs(sv - tot) > 0.009 || (q && sq !== q) ? "warn" : "ok"}" id="rateioSoma" style="font-size:12px">Soma: ${nf0.format(sq)} peça(s) de ${nf0.format(q || 0)} · ${money(sv)} de ${money(tot)}</div>` : "") : "");
+}
+function somaRateio() {
+  const nfs = nfsDoForm(), tot = parseNum($("#lValor").value), q = parseNum($("#lQtd").value);
+  const sv = nfs.reduce((a, x) => a + ((rateio[x.n] || {}).v || 0), 0), sq = nfs.reduce((a, x) => a + ((rateio[x.n] || {}).q || 0), 0);
+  const el = $("#rateioSoma"); if (el) { el.textContent = `Soma: ${nf0.format(sq)} peça(s) de ${nf0.format(q || 0)} · ${money(sv)} de ${money(tot)}`; el.className = "status " + (Math.abs(sv - tot) > 0.009 || (q && sq !== q) ? "warn" : "ok"); }
+  return { sv, sq, tot, q };
+}
+$("#listaChavesNFe").addEventListener("input", (e) => {
+  const t = e.target; const n = t.dataset.rq || t.dataset.rv; if (!n || !rateio[n]) return;
+  rateioManual = true;
+  if (t.dataset.rq) rateio[n].q = Math.round(parseNum(t.value)) || 0; else rateio[n].v = Math.round(parseNum(t.value) * 100) / 100;
+  somaRateio();
+});
+$("#listaChavesNFe").addEventListener("click", (e) => { if (e.target.id === "btnRateioIgual") { rateioManual = false; renderChavesNFe(); } });
+["#lNFsT", "#lValor", "#lQtd"].forEach((id) => $(id).addEventListener("input", () => { if (!rateioManual || id === "#lNFsT") renderChavesNFe(); else somaRateio(); }));
 $("#lChaveNFe").addEventListener("input", renderChavesNFe);
 document.addEventListener("click", async (e) => {
   const b = e.target.closest("[data-copiar-chave]"); if (!b) return;
@@ -1576,7 +1634,7 @@ function applyFrete(cte, nfesExtras) {
   } else if (!achadas.length && cte.qtdPecas) {
     $("#lQtd").value = fmtIn(cte.qtdPecas); ok.push(`${nf0.format(cte.qtdPecas)} peça${cte.qtdPecas > 1 ? "s" : ""}`);
   }
-  $("#lChaveNFe").value = chaves.join(", "); renderChavesNFe();
+  $("#lChaveNFe").value = chaves.join(", "); rateio = {}; rateioManual = false;
   $("#lancMsg").dataset.nfes = JSON.stringify(chaves.map((c) => { const n = mapa.get(c); return { chave: c, numero: n ? n.numero : String(Number(c.slice(25, 34))), emitente: n ? n.emitente : "", itens: n ? (n.itens || []).slice(0, 20) : [] }; }));
   let m = `Preenchido: ${ok.join(", ")}.`;
   if (!achadas.length && !ref) m += cte.qtdPecas ? " Escolha a obra e o material (viga ou pré-laje)." : " Escolha a obra, o material e a quantidade de peças.";
@@ -1602,7 +1660,7 @@ function applyFrete(cte, nfesExtras) {
   setImp(m, dup || mesmoCte.length ? "warn" : (!achadas.length && !ref) || falta.length ? "warn" : "ok");
   const semNFe = !achadas.length && nums.length && !(jaLanc && matFrete(jaLanc) !== "OUTRO");
   const box = $("#nfeFalta"); box.hidden = true; box.style.display = "none"; void semNFe;
-  box.dataset.chaves = faltam.join(","); box.dataset.nums = nums.join(", ");
+  box.dataset.chaves = faltam.join(","); box.dataset.nums = nums.join(", "); renderChavesNFe();
   $("#nfeFaltaChave").textContent = faltam.length ? `Chave da NF-e ${Number(faltam[0].slice(25, 34))} (documentos originários): ${faltam[0].replace(/(\d{4})(?=\d)/g, "$1 ")}` : "";
   updPrecoHint();
 }
