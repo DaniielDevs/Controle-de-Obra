@@ -1136,7 +1136,7 @@ async function iniciarSupabase() {
   $("#formLogin").addEventListener("submit", async (e) => {
     e.preventDefault(); msg.className = "status"; msg.textContent = "Entrando…";
     const { data, error } = await sb.auth.signInWithPassword(dados());
-    if (error) { msg.className = "status err"; msg.textContent = /confirm/i.test(error.message) ? "Confirme o seu e-mail pelo link que o Supabase enviou e tente de novo." : "E-mail ou senha incorretos."; return; }
+    if (error) { msg.className = "status err"; msg.textContent = /confirm/i.test(error.message) ? "Confirme o seu e-mail pelo link que o Supabase enviou e tente de novo." : "Erro: " + error.message; return; }
     entrar(data.session);
   });
   $("#btnCriarConta").onclick = async () => {
