@@ -366,7 +366,8 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
         <div class="field span2" data-only="concreto aco"><label for="lPeca" id="lPecaLabel">Aplicação</label><input id="lPeca" autocomplete="off" placeholder="Ex.: Sapata Ap. 07, Travessa Ap. 05, Laje"></div>
         <div class="field"><label for="lNum" id="lNumLabel">Número da NF</label><input id="lNum" inputmode="numeric" autocomplete="off"></div>
         <div class="field span3"><label for="lChave" id="lChaveLabel">Chave de acesso (44 dígitos)</label><div style="display:flex;gap:8px"><input id="lChave" class="mono" inputmode="numeric" autocomplete="off" maxlength="60" style="flex:1"><button type="button" class="btn" data-copiar="lChave" data-only="frete">Copiar</button></div></div>
-        <div class="field span3" data-only="frete"><label for="lChaveNFe">Chave da NF-e (documentos originários do CT-e)</label><div style="display:flex;gap:8px"><input id="lChaveNFe" class="mono" inputmode="numeric" autocomplete="off" maxlength="60" style="flex:1" placeholder="Preenchida ao ler o CT-e"><button type="button" class="btn" data-copiar="lChaveNFe">Copiar</button><button type="button" class="btn" id="btnAbrirMeuDanfe">Abrir Meu Danfe</button></div></div>
+        <div class="field span3" data-only="frete"><label for="lChaveNFe">Chaves das NF-e (documentos originários do CT-e)</label><div style="display:flex;gap:8px"><input id="lChaveNFe" class="mono" inputmode="numeric" autocomplete="off" style="flex:1" placeholder="Preenchidas ao ler o CT-e (pode colar mais de uma, separadas por vírgula)"><button type="button" class="btn" id="btnAbrirMeuDanfe">Abrir Meu Danfe</button></div>
+          <div id="listaChavesNFe" style="display:grid;gap:6px;margin-top:6px"></div></div>
 
         <!-- FRETE -->
         <div class="field" data-only="frete"><label for="lNFsT">NF remessa</label><input id="lNFsT" autocomplete="off" placeholder="Nº da NF (ou mais de uma, separadas por vírgula)"></div>
@@ -649,7 +650,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 18h45</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 19h00</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -1176,7 +1177,7 @@ function openLanc(l, cat) {
   $("#lMat").value = l && l.categoria === "frete" ? matFrete(l) : "VIGA";
   $("#lNFsT").value = l && l.nfsTransp ? l.nfsTransp.map((n) => n.numero).join(", ") : ""; $("#lPeso").value = l ? fmtIn(l.pesoKg) : "";
   $("#lancMsg").dataset.nfes = l && l.nfsTransp ? JSON.stringify(l.nfsTransp) : "";
-  $("#lChaveNFe").value = l && l.nfsTransp ? l.nfsTransp.map((n) => n.chave).filter(Boolean).join(", ") : "";
+  $("#lChaveNFe").value = l && l.nfsTransp ? l.nfsTransp.map((n) => n.chave).filter(Boolean).join(", ") : ""; renderChavesNFe();
   $("#lKm").value = l ? fmtIn(l.km) : ""; $("#lOrig").value = v("origem"); $("#lDest").value = v("destino"); $("#lObs").value = v("obs");
   $("#e7a").value = fmtIn((ens.d7 || {}).cp1); $("#e7b").value = fmtIn((ens.d7 || {}).cp2); $("#e7d").value = (ens.d7 || {}).data || "";
   $("#e14a").value = fmtIn((ens.d14 || {}).cp1); $("#e14b").value = fmtIn((ens.d14 || {}).cp2); $("#e14d").value = (ens.d14 || {}).data || "";
@@ -1236,7 +1237,7 @@ $("#formLanc").addEventListener("submit", async (e) => {
     ...(curCat === "frete" ? (() => {
       const lst = (() => { try { return JSON.parse($("#lancMsg").dataset.nfes || "[]"); } catch { return []; } })();
       const nums = $("#lNFsT").value.split(/[,;\s]+/).map((x) => x.replace(/\D/g, "")).filter(Boolean).map((x) => String(Number(x)));
-      const chs = ($("#lChaveNFe").value.match(/\d[\d\s.\-\/]{42,}\d/g) || []).map(onlyDigits).filter((c) => c.length === 44);
+      const chs = chavesNFeDoCampo();
       for (const c of chs) { const nn = String(Number(c.slice(25, 34))); if (!nums.includes(nn)) nums.push(nn); const x = lst.find((y) => String(Number(y.numero)) === nn); if (x) x.chave = x.chave || c; else lst.push({ chave: c, numero: nn, emitente: "", itens: [] }); }
       const nfsTransp = nums.map((n) => lst.find((x) => String(Number(x.numero)) === n) || { chave: "", numero: n, emitente: "", itens: [] });
       return { nfsTransp, pesoKg: $("#lPeso").value ? parseNum($("#lPeso").value) : null };
@@ -1298,6 +1299,17 @@ document.addEventListener("click", async (e) => {
   const v = onlyDigits(($("#" + b.dataset.copiar).value.split(",")[0]) || "");
   if (!v) { toast("Não há chave para copiar."); return; }
   try { await navigator.clipboard.writeText(v); toast("Chave copiada. Cole no Meu Danfe."); } catch { prompt("Copie a chave:", v); }
+});
+function chavesNFeDoCampo() { return [...new Set(($("#lChaveNFe").value.match(/\d[\d\s.\-\/]{42,}?\d(?=\D|$)/g) || []).map(onlyDigits).filter((c) => c.length === 44))]; }
+function renderChavesNFe() {
+  const cs = chavesNFeDoCampo();
+  $("#listaChavesNFe").innerHTML = cs.map((c) => `<div style="display:flex;gap:8px;align-items:center"><span class="pill none" style="min-width:86px;justify-content:center">NF ${Number(c.slice(25, 34))}</span><span class="mono" style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis">${c.replace(/(\d{4})(?=\d)/g, "$1 ")}</span><button type="button" class="btn" data-copiar-chave="${c}">Copiar</button></div>`).join("");
+}
+$("#lChaveNFe").addEventListener("input", renderChavesNFe);
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-copiar-chave]"); if (!b) return;
+  const v = b.dataset.copiarChave;
+  try { await navigator.clipboard.writeText(v); toast(`Chave da NF ${Number(v.slice(25, 34))} copiada. Cole no Meu Danfe.`); b.textContent = "Copiada ✓"; } catch { prompt("Copie a chave:", v); }
 });
 $("#btnAbrirMeuDanfe").onclick = () => window.open("https://meudanfe.com.br/", "_blank", "noopener");
 $("#fileNota").addEventListener("change", (e) => { const fs = [...e.target.files]; if (fs.length) importarVarios(fs); e.target.value = ""; });
@@ -1551,21 +1563,33 @@ function applyFrete(cte, nfesExtras) {
   const extra = [cte.origem || cte.destino ? `Rota: ${cte.origem || "?"} → ${cte.destino || "?"}` : "", cte.remetente && "Remetente: " + cte.remetente, cte.valorCarga ? "Valor da carga: " + money(cte.valorCarga) : "", cte.xObs].filter(Boolean).join(" | ");
   if (extra) $("#lObs").value = extra.slice(0, 500);
   // Frete já lançado (ex.: importado da planilha) com a mesma NF remessa: completa ele em vez de duplicar
-  const jaLanc = !editLanc && lancs.find((l) => l.categoria === "frete" && (l.nfsTransp || []).some((x) => nums.includes(String(Number(x.numero)))) && (!l.chave || l.chave === cte.chave) && (!l.numero || !cte.numero || String(Number(l.numero)) === String(Number(cte.numero))));
-  if (jaLanc) {
-    if (!achadas.length) { $("#lMat").value = matFrete(jaLanc); if (jaLanc.qtd) $("#lQtd").value = fmtIn(jaLanc.qtd); ok.push(`${nf0.format(jaLanc.qtd || 0)} ${MAT_TXT[matFrete(jaLanc)].toLowerCase()} (do lançamento existente)`); }
-    if (!o && jaLanc.obraId) { $("#lObra").value = jaLanc.obraId; const i = falta.indexOf("obra"); if (i >= 0) falta.splice(i, 1); ok.push(obraNome(jaLanc.obraId)); }
+  // Mesmo CT-e já lançado (ex.: a planilha divide um CT-e em uma linha por NF): não lança de novo
+  const mesmoCte = cte.numero ? lancs.filter((l) => l.categoria === "frete" && l.numero && String(Number(l.numero)) === String(Number(cte.numero)) && (!l.chave || !cte.chave || l.chave === cte.chave) && (!nums.length || (l.nfsTransp || []).some((x) => nums.includes(String(Number(x.numero))))) && (!editLanc || l.id !== editLanc.id)) : [];
+  // Frete aguardando CT-e (sem número) com a mesma NF: completa ele
+  const jaLanc = !editLanc && !mesmoCte.length && lancs.find((l) => l.categoria === "frete" && !l.numero && (l.nfsTransp || []).some((x) => nums.includes(String(Number(x.numero)))));
+  const ref = mesmoCte[0] || jaLanc;
+  if (ref && !achadas.length) {
+    const tot = mesmoCte.length ? mesmoCte : [ref];
+    const q = tot.reduce((a, l) => a + (Number(l.qtd) || 0), 0);
+    $("#lMat").value = matFrete(ref); if (q) $("#lQtd").value = fmtIn(q);
+    if (!o && ref.obraId) { $("#lObra").value = ref.obraId; const i = falta.indexOf("obra"); if (i >= 0) falta.splice(i, 1); }
+  } else if (!achadas.length && cte.qtdPecas) {
+    $("#lQtd").value = fmtIn(cte.qtdPecas); ok.push(`${nf0.format(cte.qtdPecas)} peça${cte.qtdPecas > 1 ? "s" : ""}`);
   }
-  $("#lChaveNFe").value = chaves.join(", ");
+  $("#lChaveNFe").value = chaves.join(", "); renderChavesNFe();
   $("#lancMsg").dataset.nfes = JSON.stringify(chaves.map((c) => { const n = mapa.get(c); return { chave: c, numero: n ? n.numero : String(Number(c.slice(25, 34))), emitente: n ? n.emitente : "", itens: n ? (n.itens || []).slice(0, 20) : [] }; }));
   let m = `Preenchido: ${ok.join(", ")}.`;
-  if (!achadas.length && !jaLanc) m += " Escolha a obra, o material e a quantidade de peças.";
+  if (!achadas.length && !ref) m += cte.qtdPecas ? " Escolha a obra e o material (viga ou pré-laje)." : " Escolha a obra, o material e a quantidade de peças.";
   else if (falta.length) m += " Confira/complete: " + falta.join(", ") + ".";
   const dup = cte.chave && lancs.find((l) => l.chave === cte.chave);
   if (dup) m += ` Atenção: esse CT-e já foi lançado em ${fmtDate(dup.data)}.`;
+  if (mesmoCte.length && !dup) {
+    const tv = mesmoCte.reduce((a, l) => a + (Number(l.valor) || 0), 0);
+    m += ` Atenção: o CT-e ${cte.numero} já está lançado (${mesmoCte.length} linha${mesmoCte.length > 1 ? "s" : ""}, ${fmtDate(mesmoCte[0].data)}, total ${money(tv)}). Não salve de novo para não duplicar.`;
+  }
   if (jaLanc && !dup) {
-    editLanc = jaLanc; $("#mLancTitulo").textContent = "Completar frete já lançado"; $("#btnExcluirLanc").hidden = false;
-    m += ` Esse frete (NF ${nums.join(", ")}) já estava lançado em ${fmtDate(jaLanc.data)}: ao salvar, ele é atualizado, sem duplicar.`;
+    editLanc = jaLanc; $("#mLancTitulo").textContent = "Completar frete aguardando CT-e"; $("#btnExcluirLanc").hidden = false;
+    m += ` Esse frete (NF ${nums.join(", ")}) estava aguardando o CT-e: ao salvar, ele é completado, sem duplicar.`;
   }
   const esp = !dup && !editLanc && aguardandoCte(chaves);
   if (esp) {
@@ -1575,7 +1599,7 @@ function applyFrete(cte, nfesExtras) {
     if (esp.obraId && !$("#lObra").value) $("#lObra").value = esp.obraId;
     m += ` Encontrei o lançamento que estava aguardando este CT-e (NF-e ${(esp.nfsTransp || []).map((x) => x.numero).join(", ")}): ao salvar, ele é completado.`;
   }
-  setImp(m, dup ? "warn" : (!achadas.length && !jaLanc) || falta.length ? "warn" : "ok");
+  setImp(m, dup || mesmoCte.length ? "warn" : (!achadas.length && !ref) || falta.length ? "warn" : "ok");
   const semNFe = !achadas.length && nums.length && !(jaLanc && matFrete(jaLanc) !== "OUTRO");
   const box = $("#nfeFalta"); box.hidden = true; box.style.display = "none"; void semNFe;
   box.dataset.chaves = faltam.join(","); box.dataset.nums = nums.join(", ");
@@ -1636,7 +1660,9 @@ function parseDacte(texto) {
   const chaves = chavesDoTexto(F);
   const propria = chaves.find((c) => c.slice(20, 22) === "57") || "";
   const c = { tipoDocumento: "CT-e", chave: propria, numero: propria ? String(Number(propria.slice(25, 34))) : "", chavesNFe: chaves.filter((x) => x !== propria && x.slice(20, 22) === "55") };
-  const d = F.match(/(?:DATA E HORA DE EMISS[ÃA]O|EMISS[ÃA]O)\s*:?\s*(\d{2})\/(\d{2})\/(\d{4})/); if (d && dataOk(d[1], d[2], d[3])) c.data = `${d[3]}-${d[2]}-${d[1]}`;
+  const d = F.match(/(?:DATA E HORA DE EMISS[ÃA]O|EMISS[ÃA]O)\s*:?\s*(\d{2})\/(\d{2})\/(\d{4})/) || F.match(/DATA E HORA DE EMISS[ÃA]O[^]{0,160}?(\d{2})\/(\d{2})\/(\d{4})/) || F.match(/PROTOCOLO DE AUTORIZA[ÇC][ÃA]O[^]{0,120}?(\d{2})\/(\d{2})\/(\d{4})/);
+  if (d && dataOk(d[1], d[2], d[3])) c.data = `${d[3]}-${d[2]}-${d[1]}`;
+  const qv = F.match(/QTDE\.? VOLUMES[^]{0,120}?(\d{1,4})\s*\/\s*PE[ÇC]AS/) || F.match(/(\d{1,4})\s*\/\s*PE[ÇC]AS/); if (qv) c.qtdPecas = Number(qv[1]);
   // Valor do frete = valor total do serviço (ou a receber) do CT-e, independente da quantidade de peças
   const v = F.match(/VALOR TOTAL D[AO] (?:PRESTA[ÇC][ÃA]O D[OE] )?SERVI[ÇC]O[^\d]{0,80}?(\d{1,3}(?:\.\d{3})*,\d{2})/) || F.match(/VALOR TOTAL A RECEBER[^\d]{0,80}?(\d{1,3}(?:\.\d{3})*,\d{2})/) || F.match(/VALOR A RECEBER[^\d]{0,80}?(\d{1,3}(?:\.\d{3})*,\d{2})/);
   if (v) c.valor = parseNum(v[1]);
@@ -1651,14 +1677,13 @@ function parseDacte(texto) {
 // Chaves de 44 dígitos em qualquer formato: "3526 1100 ..." ou "35-2611-00.437.082/0001-36-55-001-000.017.721-1.133.108.98-3"
 function dvChaveOk(c) { let soma = 0, peso = 2; for (let i = 42; i >= 0; i--) { soma += Number(c[i]) * peso; peso = peso === 9 ? 2 : peso + 1; } const r = soma % 11; return (r < 2 ? 0 : 11 - r) === Number(c[43]); }
 function chavesDoTexto(F) {
-  const achou = new Set();
-  const add = (txt) => (txt.match(/\d{44}/g) || []).forEach((c) => { if (dvChaveOk(c)) achou.add(c); });
+  const achou = [];
   const T = String(F || "");
-  add(T.replace(/(\d)[ .\-\/]{1,2}(?=\d)/g, "$1"));
-  add(T.replace(/(\d)[.\-\/](?=\d)/g, "$1"));
-  add(T.replace(/[^\d]/g, " ").replace(/(\d) (?=\d)/g, "$1"));
-  (T.replace(/[^\d ]/g, " ").match(/(?:\d{4} ?){10}\d{4}/g) || []).map(onlyDigits).filter((c) => c.length === 44).forEach((c) => achou.add(c));
-  return [...achou];
+  const runs = (txt) => (txt.match(/\d{44,}/g) || []);
+  const testa = (r) => { for (let i = 0; i + 44 <= r.length; i++) { const c = r.slice(i, i + 44); const mod = c.slice(20, 22); if ((mod === "55" || mod === "57") && Number(c.slice(0, 2)) >= 11 && Number(c.slice(0, 2)) <= 53 && dvChaveOk(c)) { if (!achou.includes(c)) achou.push(c); i += 43; } } };
+  [T.replace(/(\d)[ .\-\/]{1,2}(?=\d)/g, "$1"), T.replace(/(\d)[.\-\/](?=\d)/g, "$1"), T.replace(/[^\d]/g, " ").replace(/(\d) (?=\d)/g, "$1")].forEach((x) => runs(x).forEach(testa));
+  (T.replace(/[^\d ]/g, " ").match(/(?:\d{4} ?){10}\d{4}/g) || []).map(onlyDigits).filter((c) => c.length === 44 && !achou.includes(c)).forEach((c) => achou.push(c));
+  return achou;
 }
 function obraMaisProxima(kmTxt) {
   const alvo = kmDe(kmTxt); if (!alvo) return null;
