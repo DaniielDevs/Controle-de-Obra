@@ -257,6 +257,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
     <div class="head">
       <div><h2>Lançamentos</h2><p id="lancSub">Escolha o tipo para ver e lançar</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="btnImpEns" type="button" hidden>Importar ensaios (planilha)</button>
         <button class="btn" id="btnCsv" type="button">Copiar tabela (CSV)</button>
         <button class="btn primary" id="btnNovoLanc2" type="button">+ Novo lançamento</button>
       </div>
@@ -464,6 +465,30 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
       </div>
     </div>
   </form>
+</div>
+
+<!-- MODAL IMPORTAR ENSAIOS -->
+<div class="overlay" id="mImpEns" hidden>
+  <div class="modal" style="width:min(760px,100%)">
+    <div class="modal-h"><h2>Importar ensaios da planilha</h2><button class="btn ghost small" type="button" data-close>Fechar</button></div>
+    <div class="modal-b">
+      <div class="drop" id="dropEns">
+        <div>
+          <p><strong>Planilha de Controle Tecnológico de Concreto</strong> (.xlsx)</p>
+          <p class="hint">O sistema procura cada remessa nos lançamentos de concreto e preenche a peça concretada, os rompimentos de 7 e 28 dias e o spot check.</p>
+          <p class="status" id="impEnsStatus" aria-live="polite"></p>
+        </div>
+        <label class="btn" for="fileEns">Escolher planilha</label>
+        <input id="fileEns" type="file" accept=".xlsx,.xls,.xlsm" class="sr">
+      </div>
+      <div style="display:grid;gap:6px;font-size:14px">
+        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="impSubst" checked> Substituir ensaios que já estão preenchidos quando a planilha tiver outro valor</label>
+        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="impPeca" checked> Preencher a aplicação quando estiver vazia no lançamento</label>
+      </div>
+      <div id="impResumo"></div>
+    </div>
+    <div class="modal-f"><div class="right"><button class="btn" type="button" data-close>Cancelar</button><button class="btn primary" type="button" id="btnAplicarEns" disabled>Aplicar atualizações</button></div></div>
+  </div>
 </div>
 
 <!-- MODAL PREÇO -->
@@ -796,6 +821,7 @@ function renderLancs() {
   const L = LAYOUT[lancCat];
   $("#lancSub").textContent = L.sub;
   $("#btnNovoLanc2").textContent = "+ Novo lançamento de " + CATS[lancCat].nome.toLowerCase();
+  $("#btnImpEns").hidden = lancCat !== "concreto";
   const ls = filteredLancs();
   const t = $("#tblLanc");
   const temCat = lancs.some((l) => l.categoria === lancCat);
@@ -1383,6 +1409,128 @@ $("#btnExcluirObra").onclick = async (e) => {
   catch (err) { msg.className = "status err"; msg.textContent = dbErr(err); }
 };
 
+/* ---------- Importar ensaios (planilha de controle tecnológico) ---------- */
+let xlsxReady = null, impPlano = null;
+function loadXlsx() {
+  if (!xlsxReady) { xlsxReady = loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js").then(() => window.XLSX); xlsxReady.catch(() => (xlsxReady = null)); }
+  return xlsxReady;
+}
+function celData(v) {
+  if (v instanceof Date && !isNaN(v)) { const d = new Date(v.getTime() - v.getTimezoneOffset() * 60000); const iso = d.toISOString().slice(0, 10); return iso > "2030" ? "2026" + iso.slice(4) : iso; }
+  if (typeof v === "number" && v > 30000 && v < 60000) { const d = new Date(Date.UTC(1899, 11, 30) + v * 86400000); return d.toISOString().slice(0, 10); }
+  if (typeof v === "string") { const d = v.replace(/\D/g, ""); if (d.length === 8) return `${d.slice(4)}-${d.slice(2, 4)}-${d.slice(0, 2)}`; if (d.length === 7) return `2026-${d.slice(2, 4)}-${d.slice(0, 2)}`; }
+  return "";
+}
+function celNum(v) { if (typeof v === "number") return v; if (typeof v === "string" && /\d/.test(v)) { const n = parseNum(v); return isFinite(n) ? n : null; } return null; }
+const kmDe = (t) => { const m = String(t || "").replace(/\s/g, "").replace(/\./g, "+").match(/(\d+)\+(\d+)/); return m ? `${Number(m[1])}+${m[2]}` : null; };
+function lerPlanilhaEnsaios(wb) {
+  const linhas = [];
+  for (const nome of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header: 1, raw: true, defval: null });
+    let ini = -1;
+    for (let i = 0; i < Math.min(rows.length, 30); i++) if (String(rows[i][2] || "").toUpperCase().includes("REMESSA")) { ini = i + 1; }
+    if (ini < 0) continue;
+    for (let i = ini; i < rows.length; i++) {
+      const r = rows[i]; if (!r) continue;
+      const rem = r[2] == null ? "" : String(typeof r[2] === "number" ? Math.round(r[2]) : r[2]).trim();
+      if (!/^\d+$/.test(rem)) continue;
+      linhas.push({ aba: nome.trim(), km: kmDe(nome), remessa: rem, data: celData(r[0]), peca: r[1] ? String(r[1]).trim() : "",
+        fckP: celNum(r[3]), fckA: celNum(r[4]), m3: celNum(r[5]),
+        d7: { cp1: celNum(r[7]), cp2: celNum(r[9]), data: celData(r[8]) }, d28: { cp1: celNum(r[12]), cp2: celNum(r[14]), data: celData(r[11]) },
+        spot: { idade: celNum(r[15]), fck: celNum(r[16]) } });
+    }
+  }
+  return linhas;
+}
+function planoEnsaios(linhas, subst, peca) {
+  const porRem = new Map();
+  for (const x of linhas) { if (!porRem.has(x.remessa)) porRem.set(x.remessa, []); porRem.get(x.remessa).push(x); }
+  const alvo = lancs.filter((l) => l.categoria === "concreto" && !l.servico && l.remessa);
+  const porLanc = new Map(); for (const l of alvo) { const k = String(l.remessa).trim(); if (!porLanc.has(k)) porLanc.set(k, []); porLanc.get(k).push(l); }
+  const updates = []; let iguais = 0; const semLanc = [];
+  for (const [rem, cands] of porRem) {
+    const ls = porLanc.get(rem);
+    if (!ls) { semLanc.push(cands[0]); continue; }
+    for (const l of ls) {
+      const okm = kmDe((obraById(l.obraId) || {}).km || (obraById(l.obraId) || {}).nome);
+      const x = cands.find((c) => c.km && c.km === okm) || cands.find((c) => c.d28.cp1 != null || c.d7.cp1 != null) || cands[0];
+      const ens = JSON.parse(JSON.stringify(l.ensaios || {}));
+      let mud = [];
+      for (const k of ["d7", "d28"]) {
+        ens[k] = ens[k] || { cp1: null, cp2: null, data: "" };
+        for (const f of ["cp1", "cp2"]) { const v = x[k][f]; if (v == null) continue; const cur = ens[k][f]; if (cur == null || (subst && Number(cur) !== v)) { if (cur !== v) { ens[k][f] = v; mud.push(k === "d7" ? "7 dias" : "28 dias"); } } }
+        if (x[k].data && x[k].data !== ens[k].data && (!ens[k].data || subst)) { ens[k].data = x[k].data; }
+      }
+      if (x.spot.idade != null || x.spot.fck != null) { const sp = ens.spot || {}; if (sp.idade !== x.spot.idade || sp.fck !== x.spot.fck) { ens.spot = { idade: x.spot.idade, fck: x.spot.fck }; mud.push("spot check"); } }
+      const ch = {};
+      if (mud.length || JSON.stringify(ens) !== JSON.stringify(l.ensaios || {})) ch.ensaios = ens;
+      if (peca && !l.peca && x.peca) { ch.peca = x.peca; mud.push("aplicação"); }
+      if (Object.keys(ch).length) updates.push({ l, ch, mud: [...new Set(mud)], x }); else iguais++;
+    }
+  }
+  return { updates, iguais, semLanc, total: porRem.size, linhas: linhas.length };
+}
+function renderPlano() {
+  const p = impPlano, box = $("#impResumo");
+  if (!p) { box.innerHTML = ""; $("#btnAplicarEns").disabled = true; return; }
+  const ex = p.updates.slice(0, 8).map((u) => `<tr><td class="num">${esc(u.l.remessa)}</td><td>${esc(obraNome(u.l.obraId))}</td><td>${esc(u.x.peca || u.l.peca || "")}</td><td>${esc(u.mud.join(", ") || "datas")}</td></tr>`).join("");
+  box.innerHTML = `<dl class="kv" style="grid-template-columns:1fr auto;font-size:14px;margin:0 0 10px">
+      <dt>Linhas lidas na planilha</dt><dd>${p.linhas}</dd>
+      <dt>Remessas diferentes</dt><dd>${p.total}</dd>
+      <dt><strong>Lançamentos que serão atualizados</strong></dt><dd><strong>${p.updates.length}</strong></dd>
+      <dt>Já estão iguais à planilha</dt><dd>${p.iguais}</dd>
+      <dt>Remessas da planilha sem lançamento no sistema</dt><dd>${p.semLanc.length}</dd></dl>
+    ${ex ? `<div class="tbl-wrap"><table><thead><tr><th>Remessa</th><th>Obra</th><th>Aplicação</th><th>O que muda</th></tr></thead><tbody>${ex}</tbody></table></div>${p.updates.length > 8 ? `<p class="hint">… e mais ${p.updates.length - 8}.</p>` : ""}` : ""}
+    ${p.semLanc.length ? `<p class="hint" style="margin-top:8px">Sem lançamento: ${p.semLanc.slice(0, 15).map((x) => esc(x.remessa) + " (" + esc(x.aba) + ")").join(", ")}${p.semLanc.length > 15 ? "…" : ""}. Essas remessas ficam de fora; lance a nota e importe de novo.</p>` : ""}`;
+  $("#btnAplicarEns").disabled = !p.updates.length;
+}
+let impLinhas = null;
+async function lerArquivoEnsaios(file) {
+  const st = $("#impEnsStatus");
+  st.className = "status"; st.textContent = "Lendo a planilha…"; impPlano = null; renderPlano();
+  try {
+    const X = await loadXlsx();
+    const wb = X.read(new Uint8Array(await file.arrayBuffer()), { type: "array", cellDates: true });
+    impLinhas = lerPlanilhaEnsaios(wb);
+    if (!impLinhas.length) { st.className = "status err"; st.textContent = "Não encontrei a coluna SIMPLES REMESSA nessa planilha."; return; }
+    impPlano = planoEnsaios(impLinhas, $("#impSubst").checked, $("#impPeca").checked);
+    st.className = "status ok"; st.textContent = `${file.name}: ${wb.SheetNames.length} aba(s) lidas. Confira o resumo e clique em "Aplicar atualizações".`;
+    renderPlano();
+  } catch (e) { console.error(e); st.className = "status err"; st.textContent = "Não consegui ler esse arquivo. Confira se é a planilha .xlsx de controle tecnológico."; }
+}
+["impSubst", "impPeca"].forEach((id) => ($("#" + id).onchange = () => { if (impLinhas) { impPlano = planoEnsaios(impLinhas, $("#impSubst").checked, $("#impPeca").checked); renderPlano(); } }));
+$("#btnImpEns").onclick = () => { impPlano = null; impLinhas = null; $("#fileEns").value = ""; $("#impEnsStatus").textContent = ""; renderPlano(); openModal("mImpEns"); };
+$("#fileEns").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) lerArquivoEnsaios(f); });
+const dropE = $("#dropEns");
+["dragenter", "dragover"].forEach((ev) => dropE.addEventListener(ev, (e) => { e.preventDefault(); dropE.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => dropE.addEventListener(ev, (e) => { e.preventDefault(); dropE.classList.remove("over"); }));
+dropE.addEventListener("drop", (e) => { const f = e.dataTransfer.files[0]; if (f) lerArquivoEnsaios(f); });
+$("#btnAplicarEns").onclick = async () => {
+  if (!db || !impPlano) return;
+  const btn = $("#btnAplicarEns"), st = $("#impEnsStatus"); btn.disabled = true;
+  const ups = impPlano.updates; let feitos = 0, erros = 0;
+  const run = async () => {
+    let i = 0;
+    const worker = async () => {
+      while (i < ups.length) {
+        const u = ups[i++];
+        const { id, ...resto } = u.l;
+        for (let t = 0; t < 3; t++) {
+          try { await db.collection("lancamentos").doc(id).set({ ...resto, ...u.ch, atualizadoEm: Date.now() }); feitos++; break; }
+          catch (e) { if (t === 2 || !["resource_exhausted", "unavailable"].includes(e && e.code)) { erros++; break; } await new Promise((r) => setTimeout(r, 1500 * (t + 1))); }
+        }
+        if ((feitos + erros) % 20 === 0) st.textContent = `Atualizando… ${feitos + erros} de ${ups.length}`;
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+  };
+  st.className = "status"; st.textContent = `Atualizando… 0 de ${ups.length}`;
+  if (db.lote) await db.lote(run); else await run();
+  st.className = erros ? "status warn" : "status ok";
+  st.textContent = `Pronto: ${feitos} lançamento(s) atualizado(s)${erros ? `, ${erros} com erro (tente importar de novo)` : ""}.`;
+  impPlano = null; $("#impResumo").innerHTML = ""; toast(`Ensaios importados: ${feitos} lançamento(s).`);
+};
+
 /* ---------- Preços negociados ---------- */
 const UNID = { m3: "m³", kg: "kg", t: "t", viagem: "viagem", km: "km", vb: "verba", h: "hora" };
 const UNIDS_CAT = { concreto: ["m3", "h", "vb"], aco: ["kg", "t"], frete: ["viagem", "km", "t"] };
@@ -1711,7 +1859,9 @@ function supaDb(sb, uid) {
   }
   async function refreshCol(c) { const ls = colListeners.get(c); if (!ls || !ls.size) return; try { const s = await loadCol(c); ls.forEach((l) => l.next(s)); } catch (e) { ls.forEach((l) => l.error && l.error(e)); } }
   async function refreshDoc(p) { const ls = docListeners.get(p); if (!ls || !ls.size) return; try { const s = await loadDoc(p); ls.forEach((l) => l.next(s)); } catch (e) { ls.forEach((l) => l.error && l.error(e)); } }
-  const changed = (p) => { refreshCol(colOf(p)); refreshDoc(p); };
+  let pausa = 0; const sujos = new Set();
+  const changed = (p) => { if (pausa) { sujos.add(p); return; } refreshCol(colOf(p)); refreshDoc(p); };
+  async function lote(fn) { pausa++; try { return await fn(); } finally { pausa--; if (!pausa) { const cs = new Set([...sujos].map(colOf)); [...sujos].forEach(refreshDoc); sujos.clear(); cs.forEach(refreshCol); } } }
   function listen(map, key, l, first) { if (!map.has(key)) map.set(key, new Set()); map.get(key).add(l); first(); return () => map.get(key).delete(l); }
   function docRef(p) {
     return {
@@ -1742,7 +1892,7 @@ function supaDb(sb, uid) {
   const tudo = () => { colListeners.forEach((_, c) => refreshCol(c)); docListeners.forEach((_, p) => refreshDoc(p)); };
   window.addEventListener("focus", tudo);
   setInterval(() => { if (!document.hidden) tudo(); }, 60000);
-  return { doc: docRef, collection: colRef };
+  return { doc: docRef, collection: colRef, lote };
 }
 
 async function iniciarSupabase() {
