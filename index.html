@@ -642,7 +642,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 17h00</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 17h45</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -1196,7 +1196,7 @@ $("#formLanc").addEventListener("submit", async (e) => {
     valor = concCalc.total; valorCalc = true; precoId = fl.precoId;
     if (!$("#lFornec").value.trim()) { msg.className = "status err"; msg.textContent = "Informe a concreteira."; return; }
     if (!parseNum($("#cM3").value)) { msg.className = "status err"; msg.textContent = "Informe a quantidade realizada (m³)."; return; }
-  } else if (!valor) { const c = calcValor(formLancLike()); if (c) { valor = c.valor; valorCalc = true; precoId = c.preco.id; } }
+  } else if (!valor && curCat !== "frete") { const c = calcValor(formLancLike()); if (c) { valor = c.valor; valorCalc = true; precoId = c.preco.id; } }
   if (!$("#lData").value) { msg.className = "status err"; msg.textContent = "Informe a data."; return; }
   if (!valor && curCat === "frete" && $("#lNum").value.trim()) { msg.className = "status err"; msg.textContent = "Informe o valor do frete (ou apague o nº do CT-e para salvar como aguardando CT-e)."; return; }
   if (curCat === "aco" && !parseNum($("#lQtd").value)) { msg.className = "status err"; msg.textContent = curCat === "concreto" ? "Informe o volume (m³)." : "Informe o peso (kg)."; return; }
@@ -1474,7 +1474,7 @@ async function expandirArquivos(files) {
 }
 function resumoNFe(x) {
   const t = [x.observacao, x.enderecoEntrega, x.obsCont || ""].join(" ");
-  const km = (String(t).toUpperCase().replace(/\s/g, "").match(/KM(\d{1,3})\+(\d{3})/) || [])[0];
+  const mk = String(t).toUpperCase().replace(/\s/g, "").match(/KM:?(\d{1,3})[+.,](\d{3})/); const km = mk ? "KM" + mk[1] + "+" + mk[2] : "";
   return { chave: x.chave, numero: String(Number(x.numero) || x.numero || ""), data: x.data, emitente: x.fornecedor, destinatario: x.destNome || "", natOp: x.natOp || "",
     itens: (x.itens || []).slice(0, 60), pesoKg: x.pesoKg || null, valor: parseNum(x.valor) || 0, infCpl: String(x.observacao || "").slice(0, 1500), km: km ? km.replace("KM", "") : "", salvoEm: Date.now() };
 }
@@ -1515,7 +1515,9 @@ function applyFrete(cte, nfesExtras) {
   const mapa = new Map(notasNFe.map((n) => [n.chave, n])); (nfesExtras || []).forEach((n) => mapa.set(n.chave, n));
   const achadas = chaves.map((c) => mapa.get(c)).filter(Boolean);
   const faltam = chaves.filter((c) => !mapa.has(c));
-  const nums = chaves.map((c) => (mapa.get(c) || {}).numero || String(Number(c.slice(25, 34))));
+  for (const nn of cte.nfsNumeros || []) { if (achadas.some((n) => String(Number(n.numero)) === nn)) continue; const n = notasNFe.find((x) => String(Number(x.numero)) === nn) || (nfesExtras || []).find((x) => String(Number(x.numero)) === nn); if (n) { achadas.push(n); if (n.chave && !chaves.includes(n.chave)) chaves.push(n.chave); } }
+  if (!$("#lFornec").value) { const tr = achadas.map((n) => n.transportadora).find(Boolean); if (tr) $("#lFornec").value = tr; }
+  const nums = [...new Set(chaves.map((c) => (mapa.get(c) || {}).numero || String(Number(c.slice(25, 34)))).concat(cte.nfsNumeros || []))];
   $("#lNFsT").value = nums.join(", ");
   const mat = materialDeNFes(achadas);
   if (mat) $("#lDesc").value = mat; else if (cte.descricao) $("#lDesc").value = cte.descricao;
@@ -1525,18 +1527,29 @@ function applyFrete(cte, nfesExtras) {
   const peso = cte.pesoKg || achadas.reduce((a, n) => a + (Number(n.pesoKg) || 0), 0) || null;
   if (peso) $("#lPeso").value = fmtIn(Math.round(peso * 100) / 100);
   const texto = [cte.observacao, cte.xObs, cte.enderecoEntrega, cte.destino, ...achadas.map((n) => n.infCpl + " KM " + (n.km || ""))].join(" ");
-  const km = (texto.toUpperCase().replace(/\s/g, "").match(/KM(\d{1,3})\+(\d{3})/) || []);
-  const o = km.length ? obras.find((x) => kmDe(x.km || x.nome) === kmDe(km[1] + "+" + km[2])) : null;
+  const km = (texto.toUpperCase().replace(/\s/g, "").match(/KM:?(\d{1,3})[+.,](\d{3})/) || []);
+  const o = km.length ? obraMaisProxima(km[1] + "+" + km[2]) : null;
   if (o) { $("#lObra").value = o.id; ok.push(o.nome); } else { const g = guessObra(texto); if (g) { $("#lObra").value = g; ok.push(obraNome(g)); } else falta.push("obra"); }
   const extra = [cte.origem || cte.destino ? `Rota: ${cte.origem || "?"} → ${cte.destino || "?"}` : "", cte.remetente && "Remetente: " + cte.remetente, cte.valorCarga ? "Valor da carga: " + money(cte.valorCarga) : "", cte.xObs].filter(Boolean).join(" | ");
   if (extra) $("#lObs").value = extra.slice(0, 500);
+  // Frete já lançado (ex.: importado da planilha) com a mesma NF remessa: completa ele em vez de duplicar
+  const jaLanc = !editLanc && lancs.find((l) => l.categoria === "frete" && (l.nfsTransp || []).some((x) => nums.includes(String(Number(x.numero)))) && (!l.chave || l.chave === cte.chave) && (!l.numero || !cte.numero || String(Number(l.numero)) === String(Number(cte.numero))));
+  if (jaLanc) {
+    if (!achadas.length) { $("#lMat").value = matFrete(jaLanc); if (jaLanc.qtd) $("#lQtd").value = fmtIn(jaLanc.qtd); ok.push(`${nf0.format(jaLanc.qtd || 0)} ${MAT_TXT[matFrete(jaLanc)].toLowerCase()} (do lançamento existente)`); }
+    if (!o && jaLanc.obraId) { $("#lObra").value = jaLanc.obraId; const i = falta.indexOf("obra"); if (i >= 0) falta.splice(i, 1); ok.push(obraNome(jaLanc.obraId)); }
+  }
   $("#lancMsg").dataset.nfes = JSON.stringify(chaves.map((c) => { const n = mapa.get(c); return { chave: c, numero: n ? n.numero : String(Number(c.slice(25, 34))), emitente: n ? n.emitente : "", itens: n ? (n.itens || []).slice(0, 20) : [] }; }));
   let m = `Preenchido: ${ok.join(", ")}.`;
   if (chaves.length) m += ` O CT-e transporta ${chaves.length} NF-e: ${achadas.length} encontrada(s) na biblioteca.`;
   if (faltam.length) m += ` Não encontrei ${faltam.length} NF-e (${faltam.slice(0, 5).map((c) => Number(c.slice(25, 34))).join(", ")}): suba o XML delas junto com o CT-e ou na Biblioteca de NF-e para puxar o material.`;
+  if (!faltam.length && !achadas.length && nums.length && !jaLanc) m += ` Não encontrei a NF-e ${nums.join(", ")} na biblioteca: suba o XML (ou PDF) dela junto com o CT-e para puxar material, quantidade e obra.`;
   if (falta.length) m += " Confira/complete: " + falta.join(", ") + ".";
   const dup = cte.chave && lancs.find((l) => l.chave === cte.chave);
   if (dup) m += ` Atenção: esse CT-e já foi lançado em ${fmtDate(dup.data)}.`;
+  if (jaLanc && !dup) {
+    editLanc = jaLanc; $("#mLancTitulo").textContent = "Completar frete já lançado"; $("#btnExcluirLanc").hidden = false;
+    m += ` Esse frete (NF ${nums.join(", ")}) já estava lançado em ${fmtDate(jaLanc.data)}: ao salvar, ele é atualizado, sem duplicar.`;
+  }
   const esp = !dup && !editLanc && aguardandoCte(chaves);
   if (esp) {
     editLanc = esp; $("#mLancTitulo").textContent = "Completar frete aguardando CT-e"; $("#btnExcluirLanc").hidden = false;
@@ -1575,15 +1588,39 @@ function parseDanfeNFe(texto) {
 }
 function parseDacte(texto) {
   const F = String(texto || "").toUpperCase().replace(/\s+/g, " ");
-  const chaves = [...new Set((F.replace(/[^\d ]/g, " ").match(/(?:\d{4} ?){10}\d{4}/g) || []).map(onlyDigits).filter((c) => c.length === 44))];
+  const chaves = chavesDoTexto(F);
   const propria = chaves.find((c) => c.slice(20, 22) === "57") || "";
   const c = { tipoDocumento: "CT-e", chave: propria, numero: propria ? String(Number(propria.slice(25, 34))) : "", chavesNFe: chaves.filter((x) => x !== propria && x.slice(20, 22) === "55") };
   const d = F.match(/(?:DATA E HORA DE EMISS[ÃA]O|EMISS[ÃA]O)\s*:?\s*(\d{2})\/(\d{2})\/(\d{4})/); if (d && dataOk(d[1], d[2], d[3])) c.data = `${d[3]}-${d[2]}-${d[1]}`;
-  const v = F.match(/VALOR TOTAL DA PRESTA[ÇC][ÃA]O DO SERVI[ÇC]O\s+([\d.]+,\d{2})/) || F.match(/VALOR TOTAL DO SERVI[ÇC]O\s+([\d.]+,\d{2})/); if (v) c.valor = parseNum(v[1]);
+  // Valor do frete = valor total do serviço (ou a receber) do CT-e, independente da quantidade de peças
+  const v = F.match(/VALOR TOTAL D[AO] (?:PRESTA[ÇC][ÃA]O D[OE] )?SERVI[ÇC]O[^\d]{0,80}?(\d{1,3}(?:\.\d{3})*,\d{2})/) || F.match(/VALOR TOTAL A RECEBER[^\d]{0,80}?(\d{1,3}(?:\.\d{3})*,\d{2})/) || F.match(/VALOR A RECEBER[^\d]{0,80}?(\d{1,3}(?:\.\d{3})*,\d{2})/);
+  if (v) c.valor = parseNum(v[1]);
   const o = F.match(/IN[ÍI]CIO DA PRESTA[ÇC][ÃA]O\s+([A-ZÀ-Ü ]+?\s*-\s*[A-Z]{2})/); if (o) c.origem = o[1].replace(/\s*-\s*/, "/");
   const t = F.match(/T[ÉE]RMINO DA PRESTA[ÇC][ÃA]O\s+([A-ZÀ-Ü ]+?\s*-\s*[A-Z]{2})/); if (t) c.destino = t[1].replace(/\s*-\s*/, "/");
   const pp = F.match(/PRODUTO PREDOMINANTE\s+([^\d]{3,60}?)\s+(?:OUTRAS|VALOR|PESO)/); if (pp) c.descricao = pp[1].trim();
+  const sec = (F.match(/DOCUMENTOS ORIGIN[ÁA]RIOS([^]*?)(?:OBSERVA[ÇC][ÕO]ES|$)/) || [])[1] || "";
+  c.nfsNumeros = [...new Set([...(sec || F).matchAll(/NF-?E\s*N?[º°O]?\s*(\d{3,9})/g)].map((m) => String(Number(m[1]))))];
+  c.chavesNFe.forEach((k) => { const nn = String(Number(k.slice(25, 34))); if (!c.nfsNumeros.includes(nn)) c.nfsNumeros.push(nn); });
   c.observacao = ""; return c;
+}
+// Chaves de 44 dígitos em qualquer formato: "3526 1100 ..." ou "35-2611-00.437.082/0001-36-55-001-000.017.721-1.133.108.98-3"
+function dvChaveOk(c) { let soma = 0, peso = 2; for (let i = 42; i >= 0; i--) { soma += Number(c[i]) * peso; peso = peso === 9 ? 2 : peso + 1; } const r = soma % 11; return (r < 2 ? 0 : 11 - r) === Number(c[43]); }
+function chavesDoTexto(F) {
+  const achou = new Set();
+  const add = (txt) => (txt.match(/\d{44}/g) || []).forEach((c) => { if (dvChaveOk(c)) achou.add(c); });
+  const T = String(F || "");
+  add(T.replace(/(\d)[ .\-\/]{1,2}(?=\d)/g, "$1"));
+  add(T.replace(/(\d)[.\-\/](?=\d)/g, "$1"));
+  add(T.replace(/[^\d]/g, " ").replace(/(\d) (?=\d)/g, "$1"));
+  (T.replace(/[^\d ]/g, " ").match(/(?:\d{4} ?){10}\d{4}/g) || []).map(onlyDigits).filter((c) => c.length === 44).forEach((c) => achou.add(c));
+  return [...achou];
+}
+function obraMaisProxima(kmTxt) {
+  const alvo = kmDe(kmTxt); if (!alvo) return null;
+  const v = (k) => { const [a, b] = k.split("+"); return Number(a) * 1000 + Number(b.padEnd(3, "0").slice(0, 3)); };
+  let melhor = null, dist = Infinity;
+  for (const o of obras) { const k = kmDe(o.km || o.nome); if (!k) continue; const d = Math.abs(v(k) - v(alvo)) + (/SOLO/i.test(o.nome) ? 0.5 : 0); if (d < dist) { dist = d; melhor = o; } }
+  return melhor;
 }
 function aguardandoCte(chavesNFe) {
   return lancs.find((l) => l.categoria === "frete" && !l.numero && (l.nfsTransp || []).some((n) => n.chave && chavesNFe.includes(n.chave)));
@@ -1623,11 +1660,22 @@ async function importarVarios(files) {
     const xmls = itens.filter((i) => i.text);
     const outros = itens.filter((i) => i.file);
     if (!xmls.length && outros.length === 1) return importar(outros[0].file);
-    if (!xmls.length) { setImp("Selecione XMLs (CT-e e NF-e) ou um único PDF/foto.", "err"); return; }
+    // PDFs junto (DACTE do CT-e e/ou DANFE da NF-e): lê o texto de cada um
+    const ctesPdf = [], nfesPdf = [];
+    const pdfs = outros.filter((o) => /\.pdf$/i.test(o.file.name) || o.file.type === "application/pdf");
+    for (const [i, o] of pdfs.entries()) {
+      setImp(`Lendo PDF ${i + 1} de ${pdfs.length}…`);
+      const r = await textoDoArquivo(o.file);
+      const text = r.text || (r.canvas ? await ocrImagem(r.canvas) : "");
+      const U = String(text).toUpperCase();
+      if (/DACTE|CONHECIMENTO DE TRANSPORTE/.test(U)) { const c = parseDacte(text); if (c.chave || c.chavesNFe.length || (c.nfsNumeros || []).length) ctesPdf.push({ name: o.file.name, p: c }); }
+      else { const n = parseDanfeNFe(text); if (n.chave) nfesPdf.push(n); }
+    }
+    if (!xmls.length && !ctesPdf.length && !nfesPdf.length) { setImp("Selecione o CT-e e as NF-e (XML ou PDF).", "err"); return; }
     const lidos = xmls.map((x) => ({ name: x.name, p: parseXmlNota(x.text) })).filter((x) => x.p);
-    const ctes = lidos.filter((x) => x.p.tipoDocumento === "CT-e");
-    const nfes = lidos.filter((x) => x.p.tipoDocumento === "NF-e").map((x) => resumoNFe(x.p));
-    if (nfes.length) { const n = await guardarNFes(nfes); if (!ctes.length) { setImp(`${n} NF-e guardada(s) na biblioteca.`, "ok"); if (nfes.length === 1 && lidos.length === 1) applyExtract(lidos[0].p, "xml"); return; } }
+    const ctes = lidos.filter((x) => x.p.tipoDocumento === "CT-e").concat(ctesPdf);
+    const nfes = lidos.filter((x) => x.p.tipoDocumento === "NF-e").map((x) => resumoNFe(x.p)).concat(nfesPdf);
+    if (nfes.length) { const n = await guardarNFes(nfes); if (!ctes.length) { setImp(`${n} NF-e guardada(s) na biblioteca.`, "ok"); if (nfes.length === 1 && lidos.length === 1) applyExtract(lidos[0].p, "xml"); else if (nfes.length === 1 && nfesPdf.length === 1) applyFreteDeNFe(nfesPdf[0]); return; } }
     if (ctes.length > 1) { setImp(`Selecionei o primeiro CT-e (${ctes[0].name}). Para lançar vários CT-e, faça um de cada vez.`, "warn"); }
     if (ctes.length) { applyFrete(ctes[0].p, nfes); return; }
     if (lidos.length === 1) applyExtract(lidos[0].p, "xml");
