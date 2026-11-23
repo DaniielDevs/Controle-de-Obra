@@ -933,9 +933,9 @@ window.addEventListener("hashchange", route);
 function openModal(id) { const m = $("#" + id); m.hidden = false; const f = m.querySelector("input:not(.sr), select"); setTimeout(() => f && f.focus(), 30); }
 function closeModal(id) { $("#" + id).hidden = true; }
 $$(".overlay:not(#mLogin)").forEach((ov) => {
-  ov.addEventListener("click", (e) => { if (e.target === ov || e.target.closest("[data-close]")) ov.hidden = true; });
+  ov.addEventListener("click", (e) => { if (e.target.closest("[data-close]")) ov.hidden = true; });
 });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") $$(".overlay:not(#mLogin)").forEach((o) => (o.hidden = true)); });
+
 
 /* ---------- Lançamento: formulário ---------- */
 let editLanc = null, curCat = "frete", importMeta = null;
