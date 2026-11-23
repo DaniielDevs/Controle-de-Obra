@@ -321,7 +321,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
       <div class="drop" id="drop">
         <div>
           <p><strong>Anexar a nota</strong> para preencher sozinho</p>
-          <p class="hint">XML da NF-e ou CT-e (mais preciso) ou PDF/DANFE/DACTE. Também dá pra arrastar o arquivo aqui.</p>
+          <p class="hint">XML da NF-e ou CT-e (mais preciso), PDF do DANFE (mesmo escaneado) ou foto da nota. Também dá pra arrastar o arquivo aqui.</p>
           <p class="status" id="importStatus" aria-live="polite"></p>
         </div>
         <label class="btn" for="fileNota">Escolher arquivo</label>
@@ -1247,18 +1247,132 @@ function applyExtract(x, origem) {
   setImp(m, dup || faltaObra ? "warn" : "ok");
 }
 
+/* ---------- Nota de concreto (DANFE de simples remessa) ---------- */
+const fornPadrao = (n) => { const u = normTxt(n); return /FREITAS/.test(u) ? "Concreto Freitas" : /ENGEMIX/.test(u) ? "Engemix" : String(n || "").trim(); };
+const pareceConcreto = (t) => /FCK|CONCRETO|CONCRETAD/i.test(t || "");
+function dataOk(d, m, y) { const dt = new Date(Number(y), Number(m) - 1, Number(d)); return y >= 2020 && y <= 2035 && dt.getMonth() === Number(m) - 1 && dt.getDate() === Number(d); }
+function parseNotaConcreto(texto) {
+  const t = String(texto || "").replace(/\r/g, "");
+  const U = t.toUpperCase();
+  const f = {};
+  const ch = U.replace(/[^\d\s]/g, " ").match(/(?:\d{4}\s{0,3}){10}\d{4}/);
+  if (ch) { const c = onlyDigits(ch[0]); if (c.length === 44) f.chave = c; }
+  if (f.chave) f.remessa = String(Number(f.chave.slice(25, 34)));
+  const nn = U.match(/N[º°O]\s*[.,:]?\s*(\d{3}[.,]\d{3}[.,]\d{3}|\d{4,9})\b/);
+  if (nn) { const r = String(Number(nn[1].replace(/\D/g, ""))); if (!f.remessa) f.remessa = r; }
+  const achaData = (re) => { const m = U.match(re); return m && dataOk(m[1], m[2], m[3]) ? `${m[3]}-${m[2]}-${m[1]}` : null; };
+  f.data = achaData(/DATA\s+D[AE]\s+EMISS[ÃA]O[\s\S]{0,160}?(\d{2})\/(\d{2})\/(\d{4})/) || achaData(/PROTOCOLO[\s\S]{0,200}?(\d{2})\/(\d{2})\/(\d{4})/) || achaData(/(\d{2})\/(\d{2})\/(\d{4})/) || "";
+  if (f.data && f.chave) { const aamm = f.chave.slice(2, 6); if (f.data.slice(2, 4) + f.data.slice(5, 7) !== aamm) f.avisoData = true; }
+  f.fornecedor = /FREITAS/.test(U) ? "Concreto Freitas" : /ENGEMIX/.test(U) ? "Engemix" : "";
+  const fk = U.match(/FCK[^0-9\n]{0,15}(\d{2})(?:[.,]\d)?\s*M?PA/) || U.match(/FCK\s*(\d{2})/); if (fk) f.fck = Number(fk[1]);
+  const ac = U.match(/\bA\s*[\/I1L|]\s*C\s*[:=]?\s*(0[.,]\d{1,2})/); if (ac) f.ac = parseNum(ac[1]);
+  const sl = U.match(/SLUMP[^0-9\n]{0,10}(\d{1,3})\s*(?:±|\+\s*\/?\s*-)\s*(\d{1,2})/) || U.match(/[\[|]\s*(\d{2,3})\s*(?:±|\+\s*\/?\s*-)\s*(\d{1,2})\b/);
+  if (sl) { let a = Number(sl[1]), b = Number(sl[2]); if (a >= 40) { a = a / 10; b = b / 10; } f.slump = [a, b]; }
+  const volTxt = [U.match(/VOLUME\s*:\s*(\d+[.,]\d+|\d+)/), U.match(/VOLUME DA CARGA[\s\S]{0,220}?(\d+[.,]?\d*)\s*M[3³]/), U.match(/\bM[3³]\s*\|?\s*(\d+[.,]\d+)\s/)].filter(Boolean).map((m) => m[1]);
+  for (const vt of volTxt) {
+    let v = parseNum(vt);
+    if (!/[.,]/.test(vt) && v >= 20 && v <= 150 && v % 10 === 0) { v = v / 10; f.avisoVolume = true; }
+    if (v > 0 && v < 20) { f.m3 = v; break; }
+  }
+  const linhas = t.split("\n").map((l) => l.trim());
+  const ip = linhas.findIndex((l) => /PE[ÇC]A\s+CONCRETADA/i.test(l));
+  if (ip >= 0) { const nx = linhas.slice(ip + 1).find((l) => l && !/^(CONTRATANTE|ENDERE)/i.test(l)); if (nx) f.peca = nx.replace(/\s+\d+[.,]?\d*\s*M[3³]?\W*$/i, "").replace(/\s{2,}/g, " ").trim(); }
+  if (!f.peca) { const pc = t.match(/PE[ÇC]A\s+CONCRETADA\s*:?\s*([^\n|]{3,80})/i); if (pc) f.peca = pc[1].trim(); }
+  const km = U.match(/KM\s*(\d{1,3})\s*\+\s*(\d{3})/); if (km) f.km = `${km[1]}+${km[2]}`;
+  const tr = U.match(/\b(CF-?TRA\s*\d+|C\d{2}\.B\d+)/); if (tr) f.traco = tr[1].replace(/\s+/g, " ");
+  const lc = U.match(/LACRE\s*:?\s*(\d{3,})/); if (lc) f.lacre = lc[1];
+  return f;
+}
+function tracoDoContrato(f) {
+  const cands = tiposConcreto(f.fornecedor).filter((p) => !p.servico && Number(p.fck) === Number(f.fck));
+  if (cands.length <= 1) return cands[0] || null;
+  const info = (p) => { const d = String(p.descricao || "").toUpperCase(); const a = d.match(/A\/C\s*(\d[.,]\d+)/); const sl = d.match(/SLUMP\s*(\d+)\s*±\s*(\d+)/); return { ac: a ? parseNum(a[1]) : null, sl: sl ? [Number(sl[1]), Number(sl[2])] : null }; };
+  const ok = cands.filter((p) => { const i = info(p); return (f.ac == null || i.ac == null || Math.abs(i.ac - f.ac) < 0.001) && (!f.slump || !i.sl || (i.sl[0] === f.slump[0] && i.sl[1] === f.slump[1])); });
+  return ok.length === 1 ? ok[0] : null;
+}
+function applyConcreto(f, origem) {
+  importMeta = origem;
+  if (curCat !== "concreto") setCat("concreto");
+  const ok = [], falta = [];
+  if (f.fornecedor) $("#lFornec").value = fornPadrao(f.fornecedor); else falta.push("concreteira");
+  if (f.remessa) { $("#lRemessa").value = f.remessa; ok.push("remessa " + f.remessa); } else falta.push("nº da remessa");
+  if (f.data) { $("#lData").value = f.data; ok.push("emissão " + fmtDate(f.data)); } else falta.push("data de emissão");
+  if (f.chave) $("#lChave").value = f.chave;
+  if (f.km) { const o = obras.find((x) => kmDe(x.km || x.nome) === kmDe(f.km)); if (o) { $("#lObra").value = o.id; ok.push(o.nome); } else falta.push(`obra (KM ${f.km} não está cadastrado)`); } else falta.push("obra");
+  if (f.peca) { $("#lPeca").value = f.peca; ok.push("aplicação"); }
+  if (f.fck) $("#lFckP").value = fmtIn(f.fck);
+  if (f.traco) $("#lTracoCod").value = f.traco;
+  if (f.m3) { $("#cM3").value = fmtIn(f.m3); ok.push(nf.format(f.m3) + " m³"); } else falta.push("volume (m³)");
+  if (f.lacre && !/LACRE/i.test($("#lObs").value)) $("#lObs").value = ($("#lObs").value ? $("#lObs").value + " | " : "") + "Lacre " + f.lacre;
+  fillTraco();
+  const p = f.fck ? tracoDoContrato(f) : null;
+  if (p) { $("#lTraco").value = p.id; ok.push("FCK " + nf.format(f.fck) + (f.slump ? ` · slump ${f.slump[0]}±${f.slump[1]}` : "") + (f.ac ? ` · A/C ${String(f.ac).replace(".", ",")}` : "")); }
+  else if (f.fck) falta.push(`tipo do concreto (FCK ${nf.format(f.fck)}${f.slump ? `, slump ${f.slump[0]}±${f.slump[1]}` : ""}${f.ac ? `, A/C ${String(f.ac).replace(".", ",")}` : ""}: escolha no contrato)`);
+  else falta.push("FCK / tipo do concreto");
+  $("#uConc").dataset.manual = ""; $("#uHe").dataset.manual = "";
+  updConcreto(); updEns();
+  const dup = f.remessa && lancs.find((l) => l.categoria === "concreto" && remKey(l.remessa) === remKey(f.remessa) && (!editLanc || l.id !== editLanc.id));
+  let m = "Preenchido: " + ok.join(", ") + ".";
+  if (falta.length) m += " Confira/complete: " + falta.join("; ") + ".";
+  if (f.avisoData) m += " Atenção: a data lida não bate com o mês da chave de acesso, confira.";
+  if (f.avisoVolume) m += " Confira o volume: a vírgula não estava legível na nota.";
+  if (dup) m += ` Atenção: a remessa ${f.remessa} já foi lançada em ${fmtDate(dup.data)}.`;
+  setImp(m, falta.length || dup || f.avisoData ? "warn" : "ok");
+}
+let tessReady = null;
+function loadTesseract() {
+  if (!tessReady) { tessReady = loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js").then(() => window.Tesseract); tessReady.catch(() => (tessReady = null)); }
+  return tessReady;
+}
+async function ocrImagem(img) {
+  const T = await loadTesseract();
+  const w = await T.createWorker("por");
+  try { await w.setParameters({ tessedit_pageseg_mode: "4" }); const { data } = await w.recognize(img); return data.text || ""; }
+  finally { await w.terminate(); }
+}
+const FORMATO_CONC = `Responda só com um objeto JSON assim:
+{"remessa":"número da nota (é a simples remessa), só dígitos","data":"AAAA-MM-DD (data de emissão)","chave":"44 dígitos","fornecedor":"emitente","fck":30,"ac":0.55,"slump":"10±2 (em cm; 100±20 mm = 10±2)","m3":6.0,"peca":"peça concretada + identificação complementar","km":"39+600","traco":"código do traço se houver","lacre":""}
+Não invente: campo que não aparecer fica vazio ou null.`;
+function normalizaConcClaude(x) {
+  const f = { ...x };
+  if (f.remessa) f.remessa = String(Number(onlyDigits(f.remessa)) || "");
+  if (f.chave) f.chave = onlyDigits(f.chave);
+  if (typeof f.slump === "string") { const m = f.slump.match(/(\d+)\s*(?:±|\+\s*\/?\s*-)\s*(\d+)/); f.slump = m ? [Number(m[1]), Number(m[2])] : null; if (f.slump && f.slump[0] >= 40) f.slump = [f.slump[0] / 10, f.slump[1] / 10]; }
+  if (f.ac != null) f.ac = parseNum(f.ac); if (f.fck != null) f.fck = parseNum(f.fck); if (f.m3 != null) f.m3 = parseNum(f.m3);
+  return f;
+}
+async function lerImagemConcreto(img, blob) {
+  if (sample && blob) {
+    const lim = await sample.limits().catch(() => null);
+    if (lim && lim.images) {
+      setImp("Lendo a nota com o Claude…");
+      try { const x = await sample.json(`A imagem é um DANFE de simples remessa de concreto usinado de uma obra. Extraia os dados.\n\n${FORMATO_CONC}`, { images: [blob] }); applyConcreto(normalizaConcClaude(x || {}), "imagem"); return; }
+      catch (e) { if (e && e.code === "cancelled") return; }
+    }
+  }
+  setImp("Nota escaneada: lendo o texto da imagem (na primeira vez pode levar até 1 minuto)…");
+  try { const txt = await ocrImagem(img); applyConcreto(parseNotaConcreto(txt), "ocr"); }
+  catch (e) { console.error(e); setImp("Não consegui ler a imagem da nota. Preencha manualmente ou use o XML.", "err"); }
+}
 async function importar(file) {
   const name = file.name.toLowerCase();
   try {
     if (name.endsWith(".xml") || file.type.includes("xml")) {
       setImp("Lendo XML…");
-      const x = parseXmlNota(await file.text());
+      const txt = await file.text();
+      const x = parseXmlNota(txt);
       if (!x) { setImp("Não reconheci esse XML como NF-e ou CT-e.", "err"); return; }
+      if (x.categoria === "concreto" || (curCat === "concreto" && x.tipoDocumento === "NF-e")) {
+        const f = parseNotaConcreto([x.descricao, x.observacao, x.enderecoEntrega, x.obsCont || ""].join("\n"));
+        Object.assign(f, { remessa: String(Number(x.numero) || f.remessa || ""), data: x.data || f.data, chave: x.chave || f.chave, fornecedor: fornPadrao(x.fornecedor) || f.fornecedor, m3: Number(x.quantidade) || f.m3 });
+        applyConcreto(f, "xml"); return;
+      }
       applyExtract(x, "xml");
     } else if (name.endsWith(".pdf") || file.type === "application/pdf") {
       await importarPdf(file);
     } else if (file.type.startsWith("image/")) {
-      await importarImagem(file);
+      if (curCat === "concreto") { const img = await createImageBitmap(file).catch(() => null); const cv = document.createElement("canvas"); if (img) { cv.width = img.width; cv.height = img.height; cv.getContext("2d").drawImage(img, 0, 0); } await lerImagemConcreto(img ? cv : file, file); }
+      else await importarImagem(file);
     } else setImp("Formato não suportado. Use XML, PDF ou imagem da nota.", "err");
   } catch (err) { console.error(err); setImp("Não consegui ler esse arquivo. Preencha manualmente ou tente o XML.", "err"); }
 }
@@ -1314,6 +1428,7 @@ function parseXmlNota(text) {
       descricao: prods.slice(0, 3).map((p) => p.x).join(" + ") + (prods.length > 3 ? ` (+${prods.length - 3} itens)` : ""),
       quantidade: ok && qtd ? qtd : (cat === "frete" ? 1 : (prods.length === 1 ? prods[0].q : 0)),
       observacao: [natOp, v(one(nfe, "infAdic"), "infCpl")].filter(Boolean).join(" | "),
+      obsCont: all(nfe, "obsCont").map((o) => (o.getAttribute("xCampo") || "") + ": " + v(o, "xTexto")).join("\n"),
       enderecoEntrega: [entrega && [v(entrega, "xLgr"), v(entrega, "xCpl"), v(entrega, "xBairro")].join(" "), dest && [v(dest, "xLgr"), v(dest, "xCpl")].join(" ")].filter(Boolean).join(" "),
     };
   }
@@ -1352,6 +1467,18 @@ async function importarPdf(file) {
     text += c.items.map((it) => it.str).join(" ") + "\n";
   }
   text = text.replace(/[ \t]+/g, " ").trim();
+  const ehConc = curCat === "concreto" || pareceConcreto(text);
+  if (text.length > 150 && ehConc) { applyConcreto(parseNotaConcreto(text), "pdf"); return; }
+  if (text.length <= 150 && (curCat === "concreto" || !sample)) {
+    const page = await pdf.getPage(1);
+    const vp = page.getViewport({ scale: 3 });
+    const cv = document.createElement("canvas"); cv.width = vp.width; cv.height = vp.height;
+    await page.render({ canvasContext: cv.getContext("2d"), viewport: vp }).promise;
+    if (curCat === "concreto") { const blob = await new Promise((r) => cv.toBlob(r, "image/png")); await lerImagemConcreto(cv, blob); return; }
+    setImp("PDF escaneado: lendo o texto da imagem…");
+    try { const txt = await ocrImagem(cv); if (pareceConcreto(txt)) applyConcreto(parseNotaConcreto(txt), "ocr"); else regexFallback(txt); } catch { setImp("Não consegui ler a imagem da nota. Preencha manualmente.", "err"); }
+    return;
+  }
   if (!sample) { regexFallback(text); return; }
   try {
     if (text.length > 150) {
