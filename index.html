@@ -486,6 +486,9 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="impPeca" checked> Preencher a aplicação quando estiver vazia no lançamento</label>
       </div>
       <div id="impResumo"></div>
+      <div class="field" id="impBuscaBox" hidden><label for="impBusca">Conferir uma remessa</label>
+        <div style="display:flex;gap:8px"><input id="impBusca" inputmode="numeric" autocomplete="off" placeholder="Ex.: 18446" style="max-width:200px"><button class="btn" type="button" id="btnImpBusca">Conferir</button></div>
+        <p class="hint" id="impBuscaRes" style="margin-top:6px;font-size:13px"></p></div>
     </div>
     <div class="modal-f"><div class="right"><button class="btn" type="button" data-close>Cancelar</button><button class="btn primary" type="button" id="btnAplicarEns" disabled>Aplicar atualizações</button></div></div>
   </div>
@@ -1422,19 +1425,22 @@ function celData(v) {
   return "";
 }
 function celNum(v) { if (typeof v === "number") return v; if (typeof v === "string" && /\d/.test(v)) { const n = parseNum(v); return isFinite(n) ? n : null; } return null; }
+const remKey = (v) => String(v == null ? "" : v).replace(/\.0+$/, "").replace(/\D/g, "").replace(/^0+(?=\d)/, "");
 const kmDe = (t) => { const m = String(t || "").replace(/\s/g, "").replace(/\./g, "+").match(/(\d+)\+(\d+)/); return m ? `${Number(m[1])}+${m[2]}` : null; };
 function lerPlanilhaEnsaios(wb) {
   const linhas = [];
   for (const nome of wb.SheetNames) {
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header: 1, raw: true, defval: null });
+    const ws = wb.Sheets[nome]; if (!ws || !ws["!ref"]) continue;
+    const rg = XLSX.utils.decode_range(ws["!ref"]); rg.s.c = 0; rg.s.r = 0;
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: true, range: rg });
     let ini = -1;
     for (let i = 0; i < Math.min(rows.length, 30); i++) if (String(rows[i][2] || "").toUpperCase().includes("REMESSA")) { ini = i + 1; }
     if (ini < 0) continue;
     for (let i = ini; i < rows.length; i++) {
       const r = rows[i]; if (!r) continue;
-      const rem = r[2] == null ? "" : String(typeof r[2] === "number" ? Math.round(r[2]) : r[2]).trim();
-      if (!/^\d+$/.test(rem)) continue;
-      linhas.push({ aba: nome.trim(), km: kmDe(nome), remessa: rem, data: celData(r[0]), peca: r[1] ? String(r[1]).trim() : "",
+      const rem = r[2] == null ? "" : remKey(typeof r[2] === "number" ? Math.round(r[2]) : r[2]);
+      if (!rem || /[a-z]/i.test(String(r[2]))) continue;
+      linhas.push({ aba: nome.trim(), linha: i + 1, km: kmDe(nome), remessa: rem, data: celData(r[0]), peca: r[1] ? String(r[1]).trim() : "",
         fckP: celNum(r[3]), fckA: celNum(r[4]), m3: celNum(r[5]),
         d7: { cp1: celNum(r[7]), cp2: celNum(r[9]), data: celData(r[8]) }, d28: { cp1: celNum(r[12]), cp2: celNum(r[14]), data: celData(r[11]) },
         spot: { idade: celNum(r[15]), fck: celNum(r[16]) } });
@@ -1446,7 +1452,7 @@ function planoEnsaios(linhas, subst, peca) {
   const porRem = new Map();
   for (const x of linhas) { if (!porRem.has(x.remessa)) porRem.set(x.remessa, []); porRem.get(x.remessa).push(x); }
   const alvo = lancs.filter((l) => l.categoria === "concreto" && !l.servico && l.remessa);
-  const porLanc = new Map(); for (const l of alvo) { const k = String(l.remessa).trim(); if (!porLanc.has(k)) porLanc.set(k, []); porLanc.get(k).push(l); }
+  const porLanc = new Map(); for (const l of alvo) { const k = remKey(l.remessa); if (!porLanc.has(k)) porLanc.set(k, []); porLanc.get(k).push(l); }
   const updates = []; let iguais = 0; const semLanc = [];
   for (const [rem, cands] of porRem) {
     const ls = porLanc.get(rem);
@@ -1495,11 +1501,25 @@ async function lerArquivoEnsaios(file) {
     if (!impLinhas.length) { st.className = "status err"; st.textContent = "Não encontrei a coluna SIMPLES REMESSA nessa planilha."; return; }
     impPlano = planoEnsaios(impLinhas, $("#impSubst").checked, $("#impPeca").checked);
     st.className = "status ok"; st.textContent = `${file.name}: ${wb.SheetNames.length} aba(s) lidas. Confira o resumo e clique em "Aplicar atualizações".`;
+    $("#impBuscaBox").hidden = false;
     renderPlano();
   } catch (e) { console.error(e); st.className = "status err"; st.textContent = "Não consegui ler esse arquivo. Confira se é a planilha .xlsx de controle tecnológico."; }
 }
 ["impSubst", "impPeca"].forEach((id) => ($("#" + id).onchange = () => { if (impLinhas) { impPlano = planoEnsaios(impLinhas, $("#impSubst").checked, $("#impPeca").checked); renderPlano(); } }));
-$("#btnImpEns").onclick = () => { impPlano = null; impLinhas = null; $("#fileEns").value = ""; $("#impEnsStatus").textContent = ""; renderPlano(); openModal("mImpEns"); };
+$("#btnImpBusca").onclick = () => {
+  const k = remKey($("#impBusca").value), out = $("#impBuscaRes");
+  if (!k || !impLinhas) { out.textContent = ""; return; }
+  const naPl = impLinhas.filter((x) => x.remessa === k);
+  const noSis = lancs.filter((l) => l.categoria === "concreto" && remKey(l.remessa) === k);
+  const f = (v) => (v == null ? "—" : nf.format(v));
+  const pl = naPl.length ? naPl.map((x) => `aba "${esc(x.aba)}", linha ${x.linha} (${esc(x.peca || "sem aplicação")}; 7 dias ${f(x.d7.cp1)} / ${f(x.d7.cp2)}; 28 dias ${f(x.d28.cp1)} / ${f(x.d28.cp2)})`).join("<br>") : "não encontrada na planilha";
+  const si = noSis.length ? noSis.map((l) => `${fmtDate(l.data)} · ${esc(obraNome(l.obraId))} · ${l.servico ? "bomba" : esc(l.peca || "sem aplicação")} · 28 dias ${f(ensMax((l.ensaios || {}).d28))}`).join("<br>")
+    : "<strong>não existe lançamento de concreto com essa remessa</strong>. Lance a nota (ou rode a importação das remessas) e importe os ensaios de novo.";
+  out.innerHTML = `<strong>Na planilha:</strong> ${pl}<br><strong>No sistema:</strong> ${si}`;
+};
+$("#impBusca").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#btnImpBusca").click(); } });
+$("#btnImpEns").onclick = () => {
+  $("#impBuscaBox").hidden = true; $("#impBuscaRes").innerHTML = ""; $("#impBusca").value = ""; impPlano = null; impLinhas = null; $("#fileEns").value = ""; $("#impEnsStatus").textContent = ""; renderPlano(); openModal("mImpEns"); };
 $("#fileEns").addEventListener("change", (e) => { const f = e.target.files[0]; if (f) lerArquivoEnsaios(f); });
 const dropE = $("#dropEns");
 ["dragenter", "dragover"].forEach((ev) => dropE.addEventListener(ev, (e) => { e.preventDefault(); dropE.classList.add("over"); }));
