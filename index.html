@@ -257,6 +257,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
     <div class="head">
       <div><h2>Lançamentos</h2><p id="lancSub">Escolha o tipo para ver e lançar</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="btnLote" type="button" hidden>Lançar notas em lote</button>
         <button class="btn" id="btnImpEns" type="button" hidden>Importar ensaios (planilha)</button>
         <button class="btn" id="btnCsv" type="button">Copiar tabela (CSV)</button>
         <button class="btn primary" id="btnNovoLanc2" type="button">+ Novo lançamento</button>
@@ -473,6 +474,35 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
+<!-- MODAL LOTE -->
+<div class="overlay" id="mLote" hidden>
+  <div class="modal" style="width:min(1180px,100%)">
+    <div class="modal-h"><h2>Lançar notas de concreto em lote</h2><button class="btn ghost small" type="button" data-close>Fechar</button></div>
+    <div class="modal-b">
+      <div class="subsec">
+        <h3>1. Nota de faturamento</h3>
+        <div class="grid3">
+          <div class="field"><label for="ltNF">Número da NF</label><input id="ltNF" inputmode="numeric" autocomplete="off"></div>
+          <div class="field"><label for="ltData">Data de emissão da NF</label><input id="ltData" type="date"></div>
+          <div class="field"><span style="font-size:12px;font-weight:600;color:var(--muted)">Ler da nota (opcional)</span><label class="btn" for="ltFile" style="justify-content:center">Escolher nota de faturamento</label><input id="ltFile" type="file" accept=".xml,.pdf,image/*" class="sr"></div>
+        </div>
+        <p class="status" id="ltNFStatus" aria-live="polite"></p>
+      </div>
+      <div class="subsec">
+        <h3>2. Notas de remessa</h3>
+        <div class="drop" id="dropLote">
+          <div><p><strong>Selecione ou arraste todas as notas de remessa</strong> (PDF, foto ou XML)</p><p class="hint">Cada arquivo vira uma linha na tabela abaixo para você conferir antes de salvar.</p>
+          <p class="status" id="ltStatus" aria-live="polite"></p></div>
+          <label class="btn" for="ltRemessas">Escolher arquivos</label>
+          <input id="ltRemessas" type="file" multiple accept=".xml,.pdf,image/*" class="sr">
+        </div>
+      </div>
+      <div class="tbl-wrap"><table id="ltTabela"></table></div>
+    </div>
+    <div class="modal-f"><span class="muted" id="ltResumo" style="font-size:13px"></span><div class="right"><button class="btn" type="button" data-close>Cancelar</button><button class="btn primary" type="button" id="btnLoteSalvar" disabled>Salvar lançamentos</button></div></div>
+  </div>
+</div>
+
 <!-- MODAL IMPORTAR ENSAIOS -->
 <div class="overlay" id="mImpEns" hidden>
   <div class="modal" style="width:min(760px,100%)">
@@ -481,7 +511,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
       <div class="drop" id="dropEns">
         <div>
           <p><strong>Planilha de Controle Tecnológico de Concreto</strong> (.xlsx)</p>
-          <p class="hint">O sistema procura cada remessa nos lançamentos de concreto e preenche a peça concretada, os rompimentos de 7 e 28 dias e o spot check.</p>
+          <p class="hint">O sistema procura cada remessa nos lançamentos de concreto e preenche a aplicação (a da planilha prevalece), os rompimentos de 7 e 28 dias e o spot check.</p>
           <p class="status" id="impEnsStatus" aria-live="polite"></p>
         </div>
         <label class="btn" for="fileEns">Escolher planilha</label>
@@ -489,7 +519,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
       </div>
       <div style="display:grid;gap:6px;font-size:14px">
         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="impSubst" checked> Substituir ensaios que já estão preenchidos quando a planilha tiver outro valor</label>
-        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="impPeca" checked> Preencher a aplicação quando estiver vazia no lançamento</label>
+        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="impPeca" checked> Usar a aplicação da planilha (substitui a da nota quando for diferente)</label>
       </div>
       <div id="impResumo"></div>
       <div class="field" id="impBuscaBox" hidden><label for="impBusca">Conferir uma remessa</label>
@@ -582,6 +612,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 14h30</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -854,7 +885,7 @@ function renderLancs() {
   const L = LAYOUT[lancCat];
   $("#lancSub").textContent = L.sub;
   $("#btnNovoLanc2").textContent = "+ Novo lançamento de " + CATS[lancCat].nome.toLowerCase();
-  $("#btnImpEns").hidden = lancCat !== "concreto";
+  $("#btnImpEns").hidden = lancCat !== "concreto"; $("#btnLote").hidden = lancCat !== "concreto";
   const ls = filteredLancs();
   const t = $("#tblLanc");
   const temCat = lancs.some((l) => l.categoria === lancCat);
@@ -1324,12 +1355,16 @@ function loadTesseract() {
   if (!tessReady) { tessReady = loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js").then(() => window.Tesseract); tessReady.catch(() => (tessReady = null)); }
   return tessReady;
 }
+let ocrWorkerLote = null;
 async function ocrImagem(img) {
   const T = await loadTesseract();
+  if (ocrWorkerLote) { const { data } = await (await ocrWorkerLote).recognize(img); return data.text || ""; }
   const w = await T.createWorker("por");
   try { await w.setParameters({ tessedit_pageseg_mode: "4" }); const { data } = await w.recognize(img); return data.text || ""; }
   finally { await w.terminate(); }
 }
+async function abrirOcrLote() { const T = await loadTesseract(); ocrWorkerLote = T.createWorker("por").then(async (w) => { await w.setParameters({ tessedit_pageseg_mode: "4" }); return w; }); return ocrWorkerLote; }
+async function fecharOcrLote() { if (ocrWorkerLote) { try { (await ocrWorkerLote).terminate(); } catch {} ocrWorkerLote = null; } }
 const FORMATO_CONC = `Responda só com um objeto JSON assim:
 {"remessa":"número da nota (é a simples remessa), só dígitos","data":"AAAA-MM-DD (data de emissão)","chave":"44 dígitos","fornecedor":"emitente","fck":30,"ac":0.55,"slump":"10±2 (em cm; 100±20 mm = 10±2)","m3":6.0,"peca":"peça concretada + identificação complementar","km":"39+600","traco":"código do traço se houver","lacre":""}
 Não invente: campo que não aparecer fica vazio ou null.`;
@@ -1569,6 +1604,176 @@ $("#btnExcluirObra").onclick = async (e) => {
   catch (err) { msg.className = "status err"; msg.textContent = dbErr(err); }
 };
 
+/* ---------- Lançar notas em lote ---------- */
+async function textoDoArquivo(file, precisaImagem) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".xml") || file.type.includes("xml")) return { xml: await file.text() };
+  if (name.endsWith(".pdf") || file.type === "application/pdf") {
+    const lib = await loadPdfJs();
+    const pdf = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+    let text = "";
+    for (let i = 1; i <= Math.min(pdf.numPages, 3); i++) { const c = await (await pdf.getPage(i)).getTextContent(); text += c.items.map((it) => it.str).join(" ") + "\n"; }
+    if (text.replace(/\s/g, "").length > 150) return { text };
+    const page = await pdf.getPage(1); const vp = page.getViewport({ scale: 3 });
+    const cv = document.createElement("canvas"); cv.width = vp.width; cv.height = vp.height;
+    await page.render({ canvasContext: cv.getContext("2d"), viewport: vp }).promise;
+    return { canvas: cv };
+  }
+  if (file.type.startsWith("image/")) { const img = await createImageBitmap(file); const cv = document.createElement("canvas"); cv.width = img.width; cv.height = img.height; cv.getContext("2d").drawImage(img, 0, 0); return { canvas: cv }; }
+  throw new Error("formato");
+}
+async function extrairRemessa(file) {
+  const r = await textoDoArquivo(file);
+  if (r.xml) {
+    const x = parseXmlNota(r.xml); if (!x) throw new Error("xml");
+    const f = parseNotaConcreto([x.descricao, x.observacao, x.enderecoEntrega, x.obsCont || ""].join("\n"));
+    return Object.assign(f, { remessa: String(Number(x.numero) || f.remessa || ""), data: x.data || f.data, chave: x.chave || f.chave, fornecedor: fornPadrao(x.fornecedor) || f.fornecedor, m3: Number(x.quantidade) || f.m3 });
+  }
+  if (r.text) return parseNotaConcreto(r.text);
+  if (sample) {
+    const lim = await sample.limits().catch(() => null);
+    if (lim && lim.images) { try { const blob = await new Promise((ok) => r.canvas.toBlob(ok, "image/png")); return normalizaConcClaude(await sample.json(`A imagem é um DANFE de simples remessa de concreto usinado de uma obra. Extraia os dados.\n\n${FORMATO_CONC}`, { images: [blob] }) || {}); } catch {} }
+  }
+  return parseNotaConcreto(await ocrImagem(r.canvas));
+}
+function lerFaturamento(text) {
+  const U = String(text || "").toUpperCase(), out = {};
+  const n = U.match(/N[ÚU]MERO\s+(?:DA\s+)?(?:NFS-?E|NOTA)[^0-9]{0,20}(\d{1,12})/) || U.match(/NFS-?E\s*N?[º°O.]?\s*:?\s*(\d{1,12})/) || U.match(/N[º°O]\s*[.,:]?\s*(\d{3}[.,]\d{3}[.,]\d{3}|\d{1,9})\b/);
+  if (n) out.numero = String(Number(n[1].replace(/\D/g, "")));
+  const d = U.match(/(?:DATA\s+(?:E\s+HORA\s+)?D[AE]\s+EMISS[ÃA]O|EMITIDA\s+EM|EMISS[ÃA]O)[\s\S]{0,80}?(\d{2})\/(\d{2})\/(\d{4})/) || U.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (d && dataOk(d[1], d[2], d[3])) out.data = `${d[3]}-${d[2]}-${d[1]}`;
+  out.remessas = [...new Set((U.match(/REMESSA[S]?[^\n]{0,400}/g) || []).join(" ").match(/\b\d{4,6}\b/g) || [])];
+  return out;
+}
+let loteLinhas = [];
+const tiposOpc = (forn, sel) => `<option value="">— escolha —</option>` + tiposConcreto(forn).map((p) => { const nome = p.servico ? (SERV_TXT[p.servico] || "Serviço") : "FCK " + nf.format(p.fck) + (p.descricao ? " · " + p.descricao.replace(/^Item [\d.]+ · /, "") : ""); return `<option value="${esc(p.id)}" ${p.id === sel ? "selected" : ""}>${esc(nome)}${forn ? "" : " (" + esc(p.fornecedor) + ")"}</option>`; }).join("");
+const obrasOpc = (sel) => `<option value="">A definir</option>` + obras.filter((o) => o.ativa !== false).sort((a, b) => a.nome.localeCompare(b.nome)).map((o) => `<option value="${esc(o.id)}" ${o.id === sel ? "selected" : ""}>${esc(o.nome)}</option>`).join("");
+function renderLote() {
+  const t = $("#ltTabela");
+  if (!loteLinhas.length) { t.innerHTML = ""; $("#btnLoteSalvar").disabled = true; $("#ltResumo").textContent = ""; return; }
+  t.innerHTML = `<thead><tr><th></th><th>Arquivo</th><th>Remessa</th><th>Emissão</th><th>Concreteira</th><th>Obra</th><th>Tipo do concreto</th><th class="n">m³</th><th>Aplicação</th><th class="n">Valor</th><th>Situação</th></tr></thead><tbody>` +
+    loteLinhas.map((L, i) => {
+      if (L.lendo) return `<tr><td></td><td class="trunc">${esc(L.arquivo)}</td><td colspan="9" class="muted">Lendo…</td></tr>`;
+      if (L.erro) return `<tr><td></td><td class="trunc">${esc(L.arquivo)}</td><td colspan="9" style="color:var(--bad)">${esc(L.erro)}</td></tr>`;
+      const c = calcConcreto(linhaParaLanc(L));
+      const sit = L.existente ? `<span class="pill warn">Já lançada · atualiza NF</span>` : (!L.obraId || !L.precoId || !L.m3 || !L.data) ? `<span class="pill bad">Completar</span>` : `<span class="pill ok">Nova</span>`;
+      return `<tr data-i="${i}">
+        <td><input type="checkbox" data-k="incluir" ${L.incluir ? "checked" : ""} aria-label="Incluir"></td>
+        <td class="trunc" style="max-width:140px">${esc(L.arquivo)}</td>
+        <td><input data-k="remessa" value="${esc(L.remessa || "")}" style="width:80px"></td>
+        <td><input type="date" data-k="data" value="${esc(L.data || "")}" style="width:130px"></td>
+        <td><input data-k="fornecedor" value="${esc(L.fornecedor || "")}" list="fornLancList" style="width:130px"></td>
+        <td><select data-k="obraId" style="width:130px">${obrasOpc(L.obraId)}</select></td>
+        <td><select data-k="precoId" style="width:200px">${tiposOpc(L.fornecedor, L.precoId)}</select></td>
+        <td class="n"><input data-k="m3" value="${L.m3 ? fmtIn(L.m3) : ""}" inputmode="decimal" style="width:60px;text-align:right"></td>
+        <td><input data-k="peca" value="${esc(L.peca || "")}" style="width:180px"></td>
+        <td class="n">${c.total ? money(c.total) : "—"}</td>
+        <td>${sit}</td></tr>`;
+    }).join("") + `</tbody>`;
+  $$("#ltTabela [data-k]").forEach((el) => {
+    el.onchange = () => {
+      const L = loteLinhas[Number(el.closest("tr").dataset.i)], k = el.dataset.k;
+      L[k] = k === "incluir" ? el.checked : k === "m3" ? parseNum(el.value) : el.value;
+      if (k === "remessa") L.existente = lancs.find((l) => l.categoria === "concreto" && !l.servico && remKey(l.remessa) === remKey(L.remessa)) || null;
+      if (k === "fornecedor") L.precoId = null;
+      renderLote();
+    };
+    el.style.background = "var(--surface)"; el.style.border = "1px solid var(--line)"; el.style.borderRadius = "6px"; el.style.padding = "5px 6px";
+  });
+  const ok = loteLinhas.filter((L) => !L.erro && !L.lendo && L.incluir);
+  const tot = ok.filter((L) => !L.existente).reduce((a, L) => a + calcConcreto(linhaParaLanc(L)).total, 0);
+  $("#ltResumo").textContent = `${ok.length} nota(s) selecionada(s): ${ok.filter((L) => !L.existente).length} nova(s), ${ok.filter((L) => L.existente).length} já lançada(s) · valor das novas ${money(tot)}`;
+  $("#btnLoteSalvar").disabled = !ok.length || loteLinhas.some((L) => L.lendo);
+}
+function linhaParaLanc(L) {
+  const p = precos.find((x) => x.id === L.precoId);
+  return { categoria: "concreto", fornecedor: L.fornecedor, data: L.data, precoId: L.precoId || null, fckProjeto: p && !p.servico ? Number(p.fck) : (L.fck || null), qtd: p && p.servico ? 0 : (Number(L.m3) || 0), m3Bombeado: p && p.servico ? Number(L.m3) || 0 : 0, extras: {}, unitManual: {} };
+}
+async function processarLote(files) {
+  const novos = [...files].map((f) => ({ arquivo: f.name, file: f, lendo: true, incluir: true }));
+  loteLinhas = loteLinhas.concat(novos); renderLote();
+  const st = $("#ltStatus");
+  let usouOcr = false;
+  try {
+    for (let i = 0; i < novos.length; i++) {
+      const L = novos[i];
+      st.className = "status"; st.textContent = `Lendo ${i + 1} de ${novos.length}: ${L.arquivo}…`;
+      try {
+        if (!usouOcr && !sample && !/\.xml$/i.test(L.arquivo)) { await abrirOcrLote().catch(() => null); usouOcr = true; }
+        const f = await extrairRemessa(L.file);
+        const o = f.km ? obras.find((x) => kmDe(x.km || x.nome) === kmDe(f.km)) : null;
+        Object.assign(L, { lendo: false, remessa: f.remessa || "", data: f.data || "", fornecedor: fornPadrao(f.fornecedor || ""), obraId: o ? o.id : "", m3: f.m3 || null, peca: f.peca || "", fck: f.fck || null, chave: f.chave || "", traco: f.traco || "", lacre: f.lacre || "" });
+        const tp = f.fck ? tracoDoContrato({ ...f, fornecedor: L.fornecedor }) : null; L.precoId = tp ? tp.id : "";
+        L.existente = lancs.find((l) => l.categoria === "concreto" && !l.servico && remKey(l.remessa) === remKey(L.remessa)) || null;
+        if (loteLinhas.some((x) => x !== L && !x.erro && !x.lendo && x.remessa && remKey(x.remessa) === remKey(L.remessa))) { L.erro = `Remessa ${L.remessa} repetida neste lote`; }
+      } catch (e) { console.error(e); Object.assign(L, { lendo: false, erro: "Não consegui ler este arquivo." }); }
+      renderLote();
+    }
+  } finally { await fecharOcrLote(); }
+  st.className = "status ok"; st.textContent = `${novos.length} arquivo(s) lido(s). Confira a tabela, corrija o que precisar e clique em "Salvar lançamentos".`;
+}
+$("#btnLote").onclick = () => { loteLinhas = []; $("#ltNF").value = ""; $("#ltData").value = ""; $("#ltStatus").textContent = ""; $("#ltNFStatus").textContent = ""; $("#ltRemessas").value = ""; $("#ltFile").value = ""; setCat("concreto"); renderLote(); openModal("mLote"); };
+$("#ltRemessas").addEventListener("change", (e) => { if (e.target.files.length) processarLote(e.target.files); e.target.value = ""; });
+const dropL = $("#dropLote");
+["dragenter", "dragover"].forEach((ev) => dropL.addEventListener(ev, (e) => { e.preventDefault(); dropL.classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => dropL.addEventListener(ev, (e) => { e.preventDefault(); dropL.classList.remove("over"); }));
+dropL.addEventListener("drop", (e) => { if (e.dataTransfer.files.length) processarLote(e.dataTransfer.files); });
+$("#ltFile").addEventListener("change", async (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  const st = $("#ltNFStatus"); st.className = "status"; st.textContent = "Lendo a nota de faturamento…";
+  try {
+    const r = await textoDoArquivo(file);
+    let info = {};
+    if (r.xml) { const doc = new DOMParser().parseFromString(r.xml, "application/xml"); const g = (t) => { const n = doc.getElementsByTagNameNS("*", t)[0]; return n ? n.textContent.trim() : ""; };
+      info.numero = String(Number(g("nNF") || g("Numero") || g("nNFSe") || g("NumeroNfse")) || ""); const d = (g("dhEmi") || g("DataEmissao") || g("dEmi") || g("dhProc")).slice(0, 10); if (d) info.data = d; info.remessas = []; }
+    else info = lerFaturamento(r.text || await ocrImagem(r.canvas));
+    if (info.numero) $("#ltNF").value = info.numero;
+    if (info.data) $("#ltData").value = info.data;
+    st.className = info.numero && info.data ? "status ok" : "status warn";
+    st.textContent = `Lido: ${info.numero ? "NF " + info.numero : "número não encontrado"}, ${info.data ? "emitida " + fmtDate(info.data) : "data não encontrada"}. Confira os campos.` + (info.remessas && info.remessas.length ? ` A nota cita ${info.remessas.length} remessa(s).` : "");
+  } catch (err) { console.error(err); st.className = "status err"; st.textContent = "Não consegui ler essa nota. Digite o número e a data."; }
+  e.target.value = "";
+});
+$("#btnLoteSalvar").onclick = async () => {
+  if (!db) return;
+  const btn = $("#btnLoteSalvar"), st = $("#ltStatus"); btn.disabled = true;
+  const nfNum = $("#ltNF").value.trim(), nfData = $("#ltData").value;
+  const sel = loteLinhas.filter((L) => !L.erro && !L.lendo && L.incluir);
+  let novos = 0, atual = 0, erros = 0;
+  const run = async () => {
+    for (const L of sel) {
+      try {
+        if (L.existente) {
+          const { id, ...resto } = L.existente;
+          const up = { ...resto, atualizadoEm: Date.now() };
+          if (nfNum) up.numero = nfNum; if (nfData) up.dataNF = nfData;
+          if (!resto.chave && L.chave) up.chave = L.chave;
+          if (!resto.peca && L.peca) up.peca = L.peca;
+          await db.collection("lancamentos").doc(id).set(up); atual++;
+        } else {
+          const base = linhaParaLanc(L), c = calcConcreto(base);
+          const p = precos.find((x) => x.id === L.precoId);
+          await db.collection("lancamentos").doc().set({
+            ...base, obraId: L.obraId || "", doc: "NF-e", numero: nfNum, dataNF: nfData, remessa: L.remessa, chave: L.chave || "", peca: L.peca || "", traco: L.traco || "",
+            servico: p && p.servico ? p.servico : "", unidade: "m³", descricao: "", obs: L.lacre ? "Lacre " + L.lacre : "",
+            ensaios: { d7: { cp1: null, cp2: null, data: "" }, d14: { cp1: null, cp2: null, data: "" }, d28: { cp1: null, cp2: null, data: "" } },
+            valor: c.total, valorCalculado: true, valorUnit: c.u.conc, valorConcreto: c.linhas.conc.total, reidiPct: c.pct,
+            valoresLinhas: Object.fromEntries(Object.entries(c.linhas).map(([k, v]) => [k, { q: v.q, unit: v.unit, total: v.total }])),
+            origemDados: "lote", criadoEm: Date.now(), atualizadoEm: Date.now(),
+          }); novos++;
+        }
+      } catch (e) { console.error(e); erros++; }
+      st.textContent = `Salvando… ${novos + atual + erros} de ${sel.length}`;
+    }
+  };
+  st.className = "status";
+  if (db.lote) await db.lote(run); else await run();
+  st.className = erros ? "status warn" : "status ok";
+  st.textContent = `Pronto: ${novos} lançamento(s) novo(s) e ${atual} atualizado(s)${erros ? `, ${erros} com erro` : ""}.`;
+  toast(`Lote salvo: ${novos} novo(s), ${atual} atualizado(s).`);
+  loteLinhas = []; renderLote();
+};
+
 /* ---------- Importar ensaios (planilha de controle tecnológico) ---------- */
 let xlsxReady = null, impPlano = null;
 function loadXlsx() {
@@ -1627,7 +1832,8 @@ function planoEnsaios(linhas, subst, peca) {
       if (x.spot.idade != null || x.spot.fck != null) { const sp = ens.spot || {}; if (sp.idade !== x.spot.idade || sp.fck !== x.spot.fck) { ens.spot = { idade: x.spot.idade, fck: x.spot.fck }; mud.push("spot check"); } }
       const ch = {};
       if (mud.length || JSON.stringify(ens) !== JSON.stringify(l.ensaios || {})) ch.ensaios = ens;
-      if (peca && !l.peca && x.peca) { ch.peca = x.peca; mud.push("aplicação"); }
+      const normP = (t) => String(t || "").replace(/\s+/g, " ").trim().toUpperCase();
+      if (peca && x.peca && normP(x.peca) !== normP(l.peca)) { ch.peca = x.peca; mud.push(l.peca ? "aplicação (substituída pela da planilha)" : "aplicação"); }
       if (Object.keys(ch).length) updates.push({ l, ch, mud: [...new Set(mud)], x }); else iguais++;
     }
   }
