@@ -365,7 +365,8 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
           <select id="lDoc"><option>NF-e</option><option>CT-e</option><option>NF remessa</option><option>Recibo</option><option>Outro</option></select></div>
         <div class="field span2" data-only="concreto aco"><label for="lPeca" id="lPecaLabel">Aplicação</label><input id="lPeca" autocomplete="off" placeholder="Ex.: Sapata Ap. 07, Travessa Ap. 05, Laje"></div>
         <div class="field"><label for="lNum" id="lNumLabel">Número da NF</label><input id="lNum" inputmode="numeric" autocomplete="off"></div>
-        <div class="field span3"><label for="lChave" id="lChaveLabel">Chave de acesso (44 dígitos)</label><input id="lChave" class="mono" inputmode="numeric" autocomplete="off" maxlength="60"></div>
+        <div class="field span3"><label for="lChave" id="lChaveLabel">Chave de acesso (44 dígitos)</label><div style="display:flex;gap:8px"><input id="lChave" class="mono" inputmode="numeric" autocomplete="off" maxlength="60" style="flex:1"><button type="button" class="btn" data-copiar="lChave" data-only="frete">Copiar</button></div></div>
+        <div class="field span3" data-only="frete"><label for="lChaveNFe">Chave da NF-e (documentos originários do CT-e)</label><div style="display:flex;gap:8px"><input id="lChaveNFe" class="mono" inputmode="numeric" autocomplete="off" maxlength="60" style="flex:1" placeholder="Preenchida ao ler o CT-e"><button type="button" class="btn" data-copiar="lChaveNFe">Copiar</button><button type="button" class="btn" id="btnAbrirMeuDanfe">Abrir Meu Danfe</button></div></div>
 
         <!-- FRETE -->
         <div class="field" data-only="frete"><label for="lNFsT">NF remessa</label><input id="lNFsT" autocomplete="off" placeholder="Nº da NF (ou mais de uma, separadas por vírgula)"></div>
@@ -648,7 +649,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 18h15</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 18h45</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -1175,6 +1176,7 @@ function openLanc(l, cat) {
   $("#lMat").value = l && l.categoria === "frete" ? matFrete(l) : "VIGA";
   $("#lNFsT").value = l && l.nfsTransp ? l.nfsTransp.map((n) => n.numero).join(", ") : ""; $("#lPeso").value = l ? fmtIn(l.pesoKg) : "";
   $("#lancMsg").dataset.nfes = l && l.nfsTransp ? JSON.stringify(l.nfsTransp) : "";
+  $("#lChaveNFe").value = l && l.nfsTransp ? l.nfsTransp.map((n) => n.chave).filter(Boolean).join(", ") : "";
   $("#lKm").value = l ? fmtIn(l.km) : ""; $("#lOrig").value = v("origem"); $("#lDest").value = v("destino"); $("#lObs").value = v("obs");
   $("#e7a").value = fmtIn((ens.d7 || {}).cp1); $("#e7b").value = fmtIn((ens.d7 || {}).cp2); $("#e7d").value = (ens.d7 || {}).data || "";
   $("#e14a").value = fmtIn((ens.d14 || {}).cp1); $("#e14b").value = fmtIn((ens.d14 || {}).cp2); $("#e14d").value = (ens.d14 || {}).data || "";
@@ -1234,6 +1236,8 @@ $("#formLanc").addEventListener("submit", async (e) => {
     ...(curCat === "frete" ? (() => {
       const lst = (() => { try { return JSON.parse($("#lancMsg").dataset.nfes || "[]"); } catch { return []; } })();
       const nums = $("#lNFsT").value.split(/[,;\s]+/).map((x) => x.replace(/\D/g, "")).filter(Boolean).map((x) => String(Number(x)));
+      const chs = ($("#lChaveNFe").value.match(/\d[\d\s.\-\/]{42,}\d/g) || []).map(onlyDigits).filter((c) => c.length === 44);
+      for (const c of chs) { const nn = String(Number(c.slice(25, 34))); if (!nums.includes(nn)) nums.push(nn); const x = lst.find((y) => String(Number(y.numero)) === nn); if (x) x.chave = x.chave || c; else lst.push({ chave: c, numero: nn, emitente: "", itens: [] }); }
       const nfsTransp = nums.map((n) => lst.find((x) => String(Number(x.numero)) === n) || { chave: "", numero: n, emitente: "", itens: [] });
       return { nfsTransp, pesoKg: $("#lPeso").value ? parseNum($("#lPeso").value) : null };
     })() : {}),
@@ -1289,6 +1293,13 @@ const drop = $("#drop");
 ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
 drop.addEventListener("drop", (e) => { const fs = [...e.dataTransfer.files]; if (fs.length) importarVarios(fs); });
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-copiar]"); if (!b) return;
+  const v = onlyDigits(($("#" + b.dataset.copiar).value.split(",")[0]) || "");
+  if (!v) { toast("Não há chave para copiar."); return; }
+  try { await navigator.clipboard.writeText(v); toast("Chave copiada. Cole no Meu Danfe."); } catch { prompt("Copie a chave:", v); }
+});
+$("#btnAbrirMeuDanfe").onclick = () => window.open("https://meudanfe.com.br/", "_blank", "noopener");
 $("#fileNota").addEventListener("change", (e) => { const fs = [...e.target.files]; if (fs.length) importarVarios(fs); e.target.value = ""; });
 
 function setImp(text, cls = "") { const s = $("#importStatus"); s.textContent = text; s.className = "status " + cls; }
@@ -1530,7 +1541,7 @@ function applyFrete(cte, nfesExtras) {
   if (mat) $("#lDesc").value = mat; else if (cte.descricao) $("#lDesc").value = cte.descricao;
   const mq = matQtdDeItens(achadas.flatMap((n) => n.itens || []), $("#lDesc").value);
   $("#lMat").value = mq.mat; if (mq.qtd) $("#lQtd").value = fmtIn(mq.qtd);
-  ok.push(`${mq.qtd ? nf0.format(mq.qtd) + " " : ""}${MAT_TXT[mq.mat].toLowerCase()}${mq.qtd > 1 ? "s" : ""}`);
+  if (achadas.length) ok.push(`${mq.qtd ? nf0.format(mq.qtd) + " " : ""}${MAT_TXT[mq.mat].toLowerCase()}${mq.qtd > 1 ? "s" : ""}`);
   const peso = cte.pesoKg || achadas.reduce((a, n) => a + (Number(n.pesoKg) || 0), 0) || null;
   if (peso) $("#lPeso").value = fmtIn(Math.round(peso * 100) / 100);
   const texto = [cte.observacao, cte.xObs, cte.enderecoEntrega, cte.destino, ...achadas.map((n) => n.infCpl + " KM " + (n.km || ""))].join(" ");
@@ -1545,12 +1556,11 @@ function applyFrete(cte, nfesExtras) {
     if (!achadas.length) { $("#lMat").value = matFrete(jaLanc); if (jaLanc.qtd) $("#lQtd").value = fmtIn(jaLanc.qtd); ok.push(`${nf0.format(jaLanc.qtd || 0)} ${MAT_TXT[matFrete(jaLanc)].toLowerCase()} (do lançamento existente)`); }
     if (!o && jaLanc.obraId) { $("#lObra").value = jaLanc.obraId; const i = falta.indexOf("obra"); if (i >= 0) falta.splice(i, 1); ok.push(obraNome(jaLanc.obraId)); }
   }
+  $("#lChaveNFe").value = chaves.join(", ");
   $("#lancMsg").dataset.nfes = JSON.stringify(chaves.map((c) => { const n = mapa.get(c); return { chave: c, numero: n ? n.numero : String(Number(c.slice(25, 34))), emitente: n ? n.emitente : "", itens: n ? (n.itens || []).slice(0, 20) : [] }; }));
   let m = `Preenchido: ${ok.join(", ")}.`;
-  if (chaves.length) m += ` O CT-e transporta ${chaves.length} NF-e: ${achadas.length} encontrada(s) na biblioteca.`;
-  if (faltam.length) m += ` Falta a NF-e ${faltam.slice(0, 5).map((c) => Number(c.slice(25, 34))).join(", ")} na biblioteca: clique em \"Anexar a NF-e\" abaixo para puxar material, quantidade e obra.`;
-  if (!faltam.length && !achadas.length && nums.length && !jaLanc) m += ` Não encontrei a NF-e ${nums.join(", ")} na biblioteca: suba o XML (ou PDF) dela junto com o CT-e para puxar material, quantidade e obra.`;
-  if (falta.length) m += " Confira/complete: " + falta.join(", ") + ".";
+  if (!achadas.length && !jaLanc) m += " Escolha a obra, o material e a quantidade de peças.";
+  else if (falta.length) m += " Confira/complete: " + falta.join(", ") + ".";
   const dup = cte.chave && lancs.find((l) => l.chave === cte.chave);
   if (dup) m += ` Atenção: esse CT-e já foi lançado em ${fmtDate(dup.data)}.`;
   if (jaLanc && !dup) {
@@ -1565,9 +1575,9 @@ function applyFrete(cte, nfesExtras) {
     if (esp.obraId && !$("#lObra").value) $("#lObra").value = esp.obraId;
     m += ` Encontrei o lançamento que estava aguardando este CT-e (NF-e ${(esp.nfsTransp || []).map((x) => x.numero).join(", ")}): ao salvar, ele é completado.`;
   }
-  setImp(m, faltam.length || falta.length || dup ? "warn" : "ok");
+  setImp(m, dup ? "warn" : (!achadas.length && !jaLanc) || falta.length ? "warn" : "ok");
   const semNFe = !achadas.length && nums.length && !(jaLanc && matFrete(jaLanc) !== "OUTRO");
-  const box = $("#nfeFalta"); box.hidden = !semNFe; box.style.display = semNFe ? "flex" : "none";
+  const box = $("#nfeFalta"); box.hidden = true; box.style.display = "none"; void semNFe;
   box.dataset.chaves = faltam.join(","); box.dataset.nums = nums.join(", ");
   $("#nfeFaltaChave").textContent = faltam.length ? `Chave da NF-e ${Number(faltam[0].slice(25, 34))} (documentos originários): ${faltam[0].replace(/(\d{4})(?=\d)/g, "$1 ")}` : "";
   updPrecoHint();
