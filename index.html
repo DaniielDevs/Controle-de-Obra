@@ -675,7 +675,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 15h45</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 16h00</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -3249,17 +3249,24 @@ function supaDb(sb, uid) {
   const colOf = (p) => p.split("/").slice(0, -1).join("/");
   const fail = (e) => ({ code: e && (e.code === "42501" || /row-level security/i.test(e.message || "")) ? "invalid_argument" : "unavailable", message: e && e.message });
   const mkSnap = (path, dados) => ({ id: path.split("/").pop(), exists: dados != null, data: () => dados ?? undefined, metadata: { fromCache: false, hasPendingWrites: false } });
+  // O Supabase devolve no máximo 1.000 linhas por consulta: busca em páginas até trazer tudo
   async function loadCol(c) {
-    const { data, error } = await sb.from(T).select("path,dados").eq("colecao", c);
-    if (error) throw fail(error);
-    return { docs: data.map((r) => mkSnap(r.path, r.dados)), metadata: { fromCache: false, hasPendingWrites: false } };
+    const rows = [], PAG = 1000;
+    for (let de = 0; ; de += PAG) {
+      const { data, error } = await sb.from(T).select("path,dados").eq("colecao", c).order("path").range(de, de + PAG - 1);
+      if (error) throw fail(error);
+      rows.push(...data);
+      if (data.length < PAG) break;
+    }
+    return { docs: rows.map((r) => mkSnap(r.path, r.dados)), metadata: { fromCache: false, hasPendingWrites: false } };
   }
   async function loadDoc(p) {
     const { data, error } = await sb.from(T).select("dados").eq("path", p).maybeSingle();
     if (error) throw fail(error);
     return mkSnap(p, data ? data.dados : null);
   }
-  async function refreshCol(c) { const ls = colListeners.get(c); if (!ls || !ls.size) return; try { const s = await loadCol(c); ls.forEach((l) => l.next(s)); } catch (e) { ls.forEach((l) => l.error && l.error(e)); } }
+  const seqCol = new Map();
+  async function refreshCol(c) { const ls = colListeners.get(c); if (!ls || !ls.size) return; const n = (seqCol.get(c) || 0) + 1; seqCol.set(c, n); try { const s = await loadCol(c); if (seqCol.get(c) !== n) return; /* chegou uma leitura mais nova */ ls.forEach((l) => l.next(s)); } catch (e) { ls.forEach((l) => l.error && l.error(e)); } }
   async function refreshDoc(p) { const ls = docListeners.get(p); if (!ls || !ls.size) return; try { const s = await loadDoc(p); ls.forEach((l) => l.next(s)); } catch (e) { ls.forEach((l) => l.error && l.error(e)); } }
   let pausa = 0; const sujos = new Set();
   const changed = (p) => { if (pausa) { sujos.add(p); return; } refreshCol(colOf(p)); refreshDoc(p); };
