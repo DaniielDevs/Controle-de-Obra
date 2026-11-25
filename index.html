@@ -675,7 +675,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 15h15</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 15h45</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -2362,7 +2362,7 @@ function renderLote() {
         <td><select data-k="precoId" style="width:200px">${tiposOpc(L.fornecedor, L.precoId)}</select>${L.descExtrato ? `<div class="muted" style="font-size:11px;max-width:200px;white-space:normal">Extrato: ${esc(L.descExtrato)}${L.um && L.um.conc != null ? " · " + money(L.um.conc) + (L.servicoTipo ? "" : "/m³") : ""}</div>` : ""}</td>
         <td class="n"><input data-k="m3" value="${L.m3 ? fmtIn(L.m3) : ""}" inputmode="decimal" style="width:60px;text-align:right">${L.avisoBT ? `<div style="font-size:11px;max-width:170px;white-space:normal;text-align:left;color:${/^Extrato cobrou|não cobrou/.test(L.avisoBT) ? "var(--bad)" : "var(--muted)"}">${esc(L.avisoBT)}</div>` : ""}</td>
         <td><input data-k="peca" value="${esc(L.peca || "")}" style="width:180px">${L.servicoTipo ? `<input data-k="remessasBomba" value="${esc((L.remessasBomba || []).join(", "))}" placeholder="Remessas atendidas" title="Remessas de concreto atendidas por esta bomba" style="width:180px;margin-top:4px">${L.sugCalc ? `<div style="font-size:11px;max-width:180px;white-space:normal;font-weight:600;color:${L.sugAmbigua ? "var(--bad)" : "var(--ok)"}">${esc(L.sugCalc)}</div>` : ""}<div class="muted" style="font-size:11px;max-width:180px;white-space:normal">${(L.sugBomba || []).length ? "Mesmo dia: " + esc(L.sugBomba.map((x) => x.remessa + " · " + nf.format(x.m3 || 0) + " m³" + (x.numero ? " (NF " + x.numero + ")" : "")).join(", ")) : "Nenhuma concretagem lançada nesse dia."}</div>` : ""}</td>
-        <td class="n">${c.total ? money(c.total) : "—"}</td>
+        <td class="n">${c.total ? money(c.total) : "—"}${L.ext && L.ext.total ? (() => { const d = Math.round(((c.total || 0) - L.ext.total) * 100) / 100; return `<div style="font-size:11px;white-space:nowrap;color:${Math.abs(d) < 0.05 ? "var(--ok)" : "var(--bad)"}">extrato ${money(L.ext.total)}${Math.abs(d) < 0.05 ? " ✓" : `<br>dif. ${money(d)}`}</div>`; })() : ""}</td>
         <td>${sit}</td></tr>`;
     }).join("") + `</tbody>`;
   $$("#ltTabela [data-k]").forEach((el) => {
@@ -2382,10 +2382,11 @@ function renderLote() {
   const tot = ok.filter((L) => !L.existente).reduce((a, L) => a + calcConcreto(linhaParaLanc(L)).total, 0);
   $("#ltResumo").textContent = `${ok.length} nota(s) selecionada(s): ${ok.filter((L) => !L.existente).length} nova(s), ${ok.filter((L) => L.existente).length} já lançada(s) · valor das novas ${money(tot)}`;
   const ext = loteLinhas.filter((L) => L.descExtrato && !L.aviso && !L.erro);
-  if (ext.length) $("#ltResumo").textContent += ` · soma do extrato lido: ${money(ext.reduce((a, L) => a + calcConcreto(linhaParaLanc(L)).total, 0))}`;
+  if (ext.length) $("#ltResumo").textContent += ` · soma do extrato lido: ${money(ext.reduce((a, L) => a + (Number((L.ext || {}).total) || 0), 0))}`;
   if (loteValorNF) {
     const soma = loteLinhas.filter((L) => !L.aviso && !L.erro && !L.lendo && L.incluir).reduce((a, L) => a + calcConcreto(linhaParaLanc(L)).total, 0), dif = Math.round((loteValorNF - soma) * 100) / 100;
-    $("#ltResumo").innerHTML = esc($("#ltResumo").textContent) + ` · valor da NF ${money(loteValorNF)} · ` + (Math.abs(dif) < 0.05 ? `<b style="color:var(--ok)">bateu ✓</b>` : `<b style="color:var(--bad)">diferença ${money(dif)}</b> (falta remessa, m³ ou preço em alguma linha)`);
+    const somaExt = loteLinhas.filter((L) => !L.aviso && !L.erro && !L.lendo && L.incluir && L.ext).reduce((a, L) => a + (Number(L.ext.total) || 0), 0), difE = Math.round((loteValorNF - somaExt) * 100) / 100;
+    $("#ltResumo").innerHTML = esc($("#ltResumo").textContent) + ` · valor da NF ${money(loteValorNF)} · ` + (somaExt ? (Math.abs(difE) < 0.05 ? `extrato lido completo ✓` : `<b style="color:var(--bad)">extrato lido difere da NF em ${money(difE)}</b> (linha não lida)`) + " · " : "") + (Math.abs(dif) < 0.05 ? `<b style="color:var(--ok)">sistema bate com a NF ✓</b>` : `<b style="color:var(--bad)">sistema × NF: ${money(-dif)}</b> (preço do contrato diferente do cobrado: reajuste em Preços, se for o caso)`);
   }
   $("#btnLoteSalvar").disabled = !ok.length || loteLinhas.some((L) => L.lendo);
   if (!loteLinhas.some((L) => L.lendo)) atualizaMassaLote();
@@ -2476,8 +2477,10 @@ function aplicaBTLote() {
     const regra = faltanteBT(L.fornecedor, L.m3), mn = minBT(L.fornecedor);
     L.extras = L.extras || {};
     const cobrado = Number(L.extras.m3Faltante) || 0;
-    if (L.descExtrato && /FALTANTE/.test(L.descExtrato)) {
-      L.avisoBT = Math.abs(cobrado - regra) > 0.004 ? `Extrato cobrou ${nf.format(cobrado)} m³ faltante; pela BT mínima de ${nf.format(mn)} m³ seriam ${nf.format(regra)} m³.` : "";
+    if (L.descExtrato) {
+      const ext = Number((L.ext || {}).falt) || 0;
+      L.extras.m3Faltante = regra || null; L.btAuto = !!regra;
+      L.avisoBT = Math.abs(ext - regra) > 0.004 ? `Faltante: sistema ${nf.format(regra)} m³ (BT mínima ${nf.format(mn)} m³) · extrato ${nf.format(ext)} m³.` : regra ? `+ ${nf.format(regra)} m³ faltante (bate com o extrato).` : "";
     } else if (L.btAuto || !cobrado) {
       L.extras.m3Faltante = regra || null; L.btAuto = !!regra;
       L.avisoBT = regra ? (L.descExtrato ? `O extrato não cobrou m³ faltante; pela BT mínima de ${nf.format(mn)} m³ seriam ${nf.format(regra)} m³ (incluído).` : `+ ${nf.format(regra)} m³ faltante (BT mínima ${nf.format(mn)} m³).`) : "";
@@ -2486,7 +2489,7 @@ function aplicaBTLote() {
 }
 function linhaParaLanc(L) {
   const p = precos.find((x) => x.id === L.precoId);
-  const serv = (p && p.servico) || L.servicoTipo || "";
+  const serv = L.servicoTipo || (p && p.servico) || "";
   return { categoria: "concreto", fornecedor: L.fornecedor, data: L.data, precoId: L.precoId || null, fckProjeto: p && !p.servico ? Number(p.fck) : (serv ? null : L.fck || null), qtd: serv ? 0 : (Number(L.m3) || 0), m3Bombeado: serv ? Number(L.m3) || 0 : 0, servico: serv, extras: { ...(L.extras || {}) }, unitManual: { ...(L.um || {}) } };
 }
 const chaveLote = (L) => remKey(L.remessa) + "|" + (L.servicoTipo || "");
@@ -2499,8 +2502,10 @@ function linhasDoExtrato(ex, arquivo) {
     const SERVS = ["bomba-lanca", "bomba-mangote", "minimo"];
     if (SERVS.includes(tipo)) {
       if (loteLinhas.some((L) => chaveLote(L) === x.remessa + "|" + tipo && remKey(L.remessa) === remKey(x.remessa))) continue;
-      const p = tiposConcreto(forn).find((y) => y.servico === tipo);
-      const L = { arquivo: `${arquivo} · extrato`, incluir: true, remessa: x.remessa, data: x.data, fornecedor: forn, obraId: "", m3: x.q, peca: x.desc, servicoTipo: tipo, precoId: p ? p.id : "", um: x.unit != null ? { conc: x.unit } : {}, extras: {}, descExtrato: x.desc };
+      // adicional mínimo de bomba: cobra o m³ que faltou para o mínimo pelo preço por m³ da bomba lança (o item "verba" do contrato já é mínimo × preço)
+      const ts = tiposConcreto(forn);
+      const p = tipo === "minimo" ? (ts.find((y) => y.servico === "minimo" && (y.unidade || "m3") !== "vb") || ts.find((y) => y.servico === "bomba-lanca")) : ts.find((y) => y.servico === tipo);
+      const L = { arquivo: `${arquivo} · extrato`, incluir: true, remessa: x.remessa, data: x.data, fornecedor: forn, obraId: "", m3: x.q, peca: x.desc, servicoTipo: tipo, precoId: p ? p.id : "", um: {}, extras: {}, descExtrato: x.desc, ext: { total: x.total, unit: x.unit } };
       L.existente = existenteLote(L); loteLinhas.push(L); continue;
     }
     let L = loteLinhas.find((y) => !y.servicoTipo && !y.aviso && remKey(y.remessa) === remKey(x.remessa));
@@ -2508,13 +2513,15 @@ function linhasDoExtrato(ex, arquivo) {
       const f = parseNotaConcreto(x.desc);
       if (!L) { L = { arquivo: `${arquivo} · extrato`, incluir: true, remessa: x.remessa, fornecedor: forn, obraId: "", peca: "", extras: {}, um: {} }; loteLinhas.push(L); }
       Object.assign(L, { data: L.data || x.data, m3: x.q != null ? x.q : L.m3, fck: f.fck || L.fck || null, traco: f.traco || L.traco || "", descExtrato: x.desc });
-      if (x.unit != null) L.um.conc = x.unit;
+      L.ext = L.ext || {}; L.ext.unit = x.unit; L.ext.total = (Number(L.ext.totalAd) || 0) + (Number(x.total) || 0); L.ext.totalConc = x.total;
       if (!L.precoId && f.fck) { const tp = tracoDoContrato({ ...f, fornecedor: forn }); L.precoId = tp ? tp.id : ""; }
       L.existente = existenteLote(L);
     } else {
       if (!L) { L = { arquivo: `${arquivo} · extrato`, incluir: true, remessa: x.remessa, data: x.data, fornecedor: forn, obraId: "", peca: "", extras: {}, um: {}, descExtrato: "" }; loteLinhas.push(L); L.existente = existenteLote(L); }
       const k = { falt: ["m3Faltante", "falt"], dev: ["devolucaoM3", "dev"], he: ["he", "he"], perm: ["permanenciaH", "perm"] }[tipo];
-      L.extras[k[0]] = (Number(L.extras[k[0]]) || 0) + (Number(x.q) || 0); if (x.unit != null) L.um[k[1]] = x.unit;
+      L.ext = L.ext || {}; L.ext.totalAd = (Number(L.ext.totalAd) || 0) + (Number(x.total) || 0); L.ext.total = (Number(L.ext.totalConc) || 0) + L.ext.totalAd;
+      if (tipo === "falt") L.ext.falt = (Number(L.ext.falt) || 0) + (Number(x.q) || 0); // faltante: o sistema calcula pela BT; o extrato só confere
+      else L.extras[k[0]] = (Number(L.extras[k[0]]) || 0) + (Number(x.q) || 0); // devolução, HE, permanência: quantidade do extrato, preço do contrato
       L.descExtrato = [L.descExtrato, x.desc].filter(Boolean).join(" + ");
     }
   }
@@ -2582,7 +2589,7 @@ async function lerItensLote(itens) {
   } finally { await fecharOcrLote(); }
   // linha do extrato sem preço (ex.: quebrou na leitura): usa o unitário de outra remessa com o mesmo concreto
   const normD = (d) => String(d || "").split(" + ")[0].toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/O(?=\d)/g, "0");
-  for (const L of loteLinhas) if (L.descExtrato && !L.servicoTipo && L.um && L.um.conc == null) { const o = loteLinhas.find((x) => x !== L && x.um && x.um.conc != null && !x.servicoTipo && normD(x.descExtrato) === normD(L.descExtrato)); if (o) { L.um.conc = o.um.conc; L.precoId = L.precoId || o.precoId; } }
+  for (const L of loteLinhas) if (L.descExtrato && !L.servicoTipo && !L.precoId) { const o = loteLinhas.find((x) => x !== L && x.precoId && !x.servicoTipo && normD(x.descExtrato) === normD(L.descExtrato)); if (o) L.precoId = o.precoId; }
   aplicaBTLote();
   // remessas repetidas no lote
   const vistos = new Map();
