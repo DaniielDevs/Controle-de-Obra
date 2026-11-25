@@ -675,7 +675,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 16h15</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 17h00</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -915,7 +915,7 @@ const MAT_TXT = { VIGA: "Viga", "PRÉ-LAJE": "Pré-laje", OUTRO: "Outro" };
 function qtdPorMat(ls) { const r = { VIGA: 0, "PRÉ-LAJE": 0, OUTRO: 0 }; for (const l of ls) if (l.categoria === "frete") r[matFrete(l)] = (r[matFrete(l)] || 0) + (Number(l.qtd) || 0); return r; }
 const txtMat = (r) => [`${nf0.format(r.VIGA)} viga${r.VIGA === 1 ? "" : "s"}`, `${nf0.format(r["PRÉ-LAJE"])} pré-laje${r["PRÉ-LAJE"] === 1 ? "" : "s"}`].concat(r.OUTRO ? [`${nf0.format(r.OUTRO)} outros`] : []).join(" · ");
 const tipoDe = (l) => {
-  if (l.categoria === "concreto") return l.servico ? "Bombeamento" : n2(l.fckProjeto) != null ? "FCK " + nf.format(l.fckProjeto) + (l.traco ? " · " + l.traco : "") : (l.traco || "Sem FCK");
+  if (l.categoria === "concreto") return l.servico ? "Bombeamento" : /PROJ/i.test(l.traco || "") ? "Projetado" : n2(l.fckProjeto) != null ? "FCK " + nf.format(l.fckProjeto) + (l.traco ? " · " + l.traco : "") : (l.traco || "Sem FCK");
   if (l.categoria === "aco") return [l.tipoAco, l.bitola ? "Ø " + String(l.bitola).replace(".", ",") + " mm" : ""].filter(Boolean).join(" · ") || "Sem tipo";
   return MAT_TXT[matFrete(l)];
 };
@@ -1114,6 +1114,8 @@ function formLancLike() {
       permanenciaH: numOrNull("cPermQ"), permanenciaNF: $("#cPermNF").value.trim(), devolucaoM3: numOrNull("cDevQ"), devolucaoNF: $("#cDevNF").value.trim() },
     unitManual: um, desconto: { pct: numOrNull("dPct"), valor: numOrNull("dVal") } };
 }
+// nome do item de concreto: "FCK 30 · Slump…" ou, sem FCK (ex.: concreto projetado), a descrição
+const nomeItemConc = (p) => { const d = (p.descricao || "").replace(/^Item [\d.]+ · /, ""); return p.fck != null && p.fck !== "" ? "FCK " + nf.format(p.fck) + (d ? " · " + d : "") : d || "Concreto sem FCK"; };
 function tiposConcreto(forn) {
   return precos.filter((p) => p.categoria === "concreto" && (!forn || !p.fornecedor || fornIgual(p.fornecedor, forn)) && (!p.servico || ["bomba-mangote", "bomba-lanca", "minimo"].includes(p.servico)))
     .sort((a, b) => (a.servico ? 1 : 0) - (b.servico ? 1 : 0) || (Number(a.fck) || 0) - (Number(b.fck) || 0) || (a.descricao || "").localeCompare(b.descricao || ""));
@@ -1123,7 +1125,7 @@ function fillTraco(sel) {
   const forn = $("#lFornec").value.trim(), data = $("#lData").value;
   const lista = tiposConcreto(forn);
   const fck = numOrNull("lFckP");
-  const opt = (p) => { const v = vigente(p, data) || atual(p); const nome = p.servico ? (SERV_TXT[p.servico] || "Serviço") : "FCK " + nf.format(p.fck) + (p.descricao ? " · " + p.descricao.replace(/^Item [\d.]+ · /, "") : ""); return `<option value="${esc(p.id)}">${esc(nome)}${forn ? "" : " (" + esc(p.fornecedor) + ")"} — ${v ? money(v.valor) + "/" + (UNID[p.unidade] || p.unidade) : "sem preço"}</option>`; };
+  const opt = (p) => { const v = vigente(p, data) || atual(p); const nome = p.servico ? (SERV_TXT[p.servico] || "Serviço") : nomeItemConc(p); return `<option value="${esc(p.id)}">${esc(nome)}${forn ? "" : " (" + esc(p.fornecedor) + ")"} — ${v ? money(v.valor) + "/" + (UNID[p.unidade] || p.unidade) : "sem preço"}</option>`; };
   const conc = lista.filter((p) => !p.servico), serv = lista.filter((p) => p.servico);
   el.innerHTML = `<option value="">${lista.length ? "Escolha o tipo do concreto" : forn ? "Nenhum preço cadastrado para essa concreteira" : "Informe a concreteira"}</option>` +
     (conc.length ? `<optgroup label="Concreto">${conc.map(opt).join("")}</optgroup>` : "") + (serv.length ? `<optgroup label="Bombeamento (serviço)">${serv.map(opt).join("")}</optgroup>` : "");
@@ -1226,7 +1228,7 @@ function openLanc(l, cat) {
   $("#mLancTitulo").textContent = l ? "Editar lançamento · " + (CATS[l.categoria]?.nome || "") : "";
   $("#btnExcluirLanc").hidden = !l; $("#btnExcluirLanc").textContent = "Excluir lançamento"; delete $("#btnExcluirLanc").dataset.confirm;
   $("#importStatus").textContent = ""; $("#importStatus").className = "status";
-  $("#lancMsg").textContent = ""; delete $("#lancMsg").dataset.dupOk;
+  $("#lancMsg").textContent = ""; delete $("#lancMsg").dataset.dupOk; $("#btnSalvarLanc").dataset.dupOk = "";
   $("#drop").hidden = !!l;
   fillObraSelect($("#lObra"), l ? l.obraId : $("#obraGlobal").value);
   const v = (k, d = "") => (l && l[k] != null ? l[k] : d);
@@ -1340,6 +1342,16 @@ $("#formLanc").addEventListener("submit", async (e) => {
     atualizadoEm: Date.now(),
   };
   if (editLanc && editLanc.exemplo) data.exemplo = true;
+  // remessa já lançada (mesma remessa e mesmo tipo: concreto ou o mesmo serviço de bomba): bloqueia a duplicidade
+  if (curCat === "concreto" && data.remessa) {
+    const dupl = lancs.find((l) => l.categoria === "concreto" && (!editLanc || l.id !== editLanc.id) && remKey(l.remessa) === remKey(data.remessa) && (l.servico || "") === (data.servico || "") && fornIgual(l.fornecedor || data.fornecedor || "", data.fornecedor || l.fornecedor || ""));
+    const bt = $("#btnSalvarLanc");
+    if (dupl && bt.dataset.dupOk !== data.remessa) {
+      msg.className = "status err"; msg.textContent = `A remessa ${data.remessa}${data.servico ? ` (${SERV_TXT[data.servico] || data.servico})` : ""} já está lançada (${fmtDate(dupl.data)}${dupl.numero ? ", NF " + dupl.numero : ""}). Para alterar, abra o lançamento existente. Se for mesmo outro lançamento, clique em Salvar de novo.`;
+      bt.dataset.dupOk = data.remessa; return;
+    }
+    bt.dataset.dupOk = "";
+  }
   if (editLanc && editLanc.importKey) data.importKey = editLanc.importKey;
   const btn = $("#btnSalvarLanc");
   if (curCat === "frete" && (data.nfsTransp || []).length >= 2) {
@@ -1588,9 +1600,12 @@ function parseNotaConcreto(texto) {
   // Engemix (Votorantim): produto "ESP AC<0,45 C30 B01 SL10 2 S" = A/C 0,45 · FCK 30 · traço C30.B01 · slump 10±2
   // tolera erros de OCR: "C: 30 BOI", "CIO B01" (O→0, I/L→1)
   const dg = (x) => x.replace(/[OQD]/g, "0").replace(/[IL|]/g, "1");
-  let esp = U.match(/\bC(\d{2})[.\s]B(\d{2})\b/);
+  // concreto projetado: "ESP PROJ CC> 350 B0 SL12+-2 VU" → sem FCK, consumo mínimo de cimento 350 kg/m³
+  const proj = U.match(/\bPROJ(?:ETADO)?\b[^\n]{0,20}?CC\s*[>≥=]?\s*(\d{3})/) || (/\bESP\s+PROJ|CONCRETO\s+PROJETADO/.test(U) ? [null, ""] : null);
+  if (proj) { f.projetado = true; f.consumo = proj[1] ? Number(proj[1]) : null; }
+  let esp = proj ? null : U.match(/\bC(\d{2})[.\s]B(\d{2})\b/);
   if (!esp) { const e2 = U.match(/AC\s*[<≤=]?\s*0[.,]\d{1,2}\s*C\W{0,2}\s*([0-9OQIL]{2})\s*\.?\s*B\s*([0-9OQDIL]{2})/); if (e2 && /^\d\d$/.test(dg(e2[1])) && /^\d\d$/.test(dg(e2[2]))) esp = [e2[0], dg(e2[1]), dg(e2[2])]; }
-  const fk = U.match(/FCK[^0-9\n]{0,15}(\d{2})(?:[.,]\d)?\s*M?PA/) || U.match(/FCK\s*(\d{2})/); if (fk) f.fck = Number(fk[1]); else if (esp) f.fck = Number(esp[1]);
+  const fk = proj ? null : U.match(/FCK[^0-9\n]{0,15}(\d{2})(?:[.,]\d)?\s*M?PA/) || U.match(/FCK\s*(\d{2})/); if (fk) f.fck = Number(fk[1]); else if (esp) f.fck = Number(esp[1]);
   const ac = U.match(/\bA\s*[\/I1L|]\s*C\s*[:=]?\s*(0[.,]\d{1,2})/) || U.match(/\bAC\s*[<≤=]?\s*(0[.,]\d{1,2})/); if (ac) f.ac = parseNum(ac[1]);
   const sl = U.match(/SLUMP[^0-9\n]{0,10}(\d{1,3})\s*(?:±|\+\s*\/?\s*-)\s*(\d{1,2})/) || U.match(/[\[|]\s*(\d{2,3})\s*(?:±|\+\s*\/?\s*-)\s*(\d{1,2})\b/) || U.match(/\bSL\s*(\d{1,3})\s+(\d{1,2})\b/) || (() => { const m = U.match(/\bSL\s*([0-9OQIL]{1,3})\s*(?:\+\s*\/?\s*-|±|\+|:)\s*([0-9OQIL]{1,2})/); return m && /^\d+$/.test(dg(m[1])) && /^\d+$/.test(dg(m[2])) ? [m[0], dg(m[1]), dg(m[2])] : null; })();
   if (sl) { let a = Number(sl[1]), b = Number(sl[2]); if (a >= 40) { a = a / 10; b = b / 10; } f.slump = [a, b]; }
@@ -1606,12 +1621,14 @@ function parseNotaConcreto(texto) {
   if (!f.peca) { const pc = t.match(/PE[ÇC]A\s+CONCRETADA\s*:?\s*([^\n|]{3,80})/i); if (pc) f.peca = pc[1].trim(); }
   const km = U.match(/KM\s*(\d{1,3})\s*\+\s*(\d{3})/); if (km) f.km = `${km[1]}+${km[2]}`;
   const tr = U.match(/\b(CF-?TRA\s*\d+|C\d{2}\.B\d+)/); if (tr) f.traco = tr[1].replace(/\s+/g, " "); else if (esp) f.traco = `C${esp[1]}.B${esp[2]}`;
+  if (proj) f.traco = "PROJETADO" + (f.consumo ? " CC" + f.consumo : "");
   const vn = U.match(/VALOR TOTAL\s*:\s*R\$\s*([\d.]+,\d{2})/); if (vn) f.valorNota = parseNum(vn[1]);
   const oc = U.match(/ORDEM DE COMPRA\s*N?R?\.?\s*:?\s*(\d{1,8})/); if (oc) f.pedido = oc[1];
   const lc = U.match(/LACRE\s*:?\s*(\d{3,})/); if (lc) f.lacre = lc[1];
   return f;
 }
 function tracoDoContrato(f) {
+  if (f.projetado) { const c = tiposConcreto(f.fornecedor).filter((p) => !p.servico && (p.fck == null || p.fck === "") && /PROJ/i.test(p.descricao || "")); return c.length === 1 ? c[0] : c.find((p) => f.consumo && new RegExp(String(f.consumo)).test(p.descricao || "")) || null; }
   const cands = tiposConcreto(f.fornecedor).filter((p) => !p.servico && Number(p.fck) === Number(f.fck));
   if (cands.length <= 1) return cands[0] || null;
   const info = (p) => { const d = String(p.descricao || "").toUpperCase(); const a = d.match(/A\/C\s*(\d[.,]\d+)/); const sl = d.match(/SLUMP\s*(\d+)\s*±\s*(\d+)/); return { ac: a ? parseNum(a[1]) : null, sl: sl ? [Number(sl[1]), Number(sl[2])] : null }; };
@@ -1635,7 +1652,7 @@ function applyConcreto(f, origem) {
   if (f.pedido && !/PEDIDO|O\.C\./i.test($("#lObs").value)) $("#lObs").value = ($("#lObs").value ? $("#lObs").value + " | " : "") + "Ordem de compra " + f.pedido;
   if (f.lacre && !/LACRE/i.test($("#lObs").value)) $("#lObs").value = ($("#lObs").value ? $("#lObs").value + " | " : "") + "Lacre " + f.lacre;
   fillTraco();
-  let p = f.fck ? tracoDoContrato(f) : null, porHist = false;
+  let p = f.fck || f.projetado ? tracoDoContrato(f) : null, porHist = false;
   if (!p && f.traco) {
     // Mesmo traço já lançado antes para essa concreteira: usa o mesmo item do contrato
     const cont = new Map();
@@ -1644,6 +1661,7 @@ function applyConcreto(f, origem) {
     if (top) { p = precos.find((x) => x.id === top[0]) || null; porHist = !!p; }
   }
   if (p) { $("#lTraco").value = p.id; ok.push("FCK " + nf.format(f.fck) + (f.slump ? ` · slump ${f.slump[0]}±${f.slump[1]}` : "") + (f.ac ? ` · A/C ${String(f.ac).replace(".", ",")}` : "") + (porHist ? ` (item do contrato igual às remessas anteriores com traço ${f.traco})` : "")); }
+  else if (f.projetado) falta.push(`tipo do concreto (concreto projetado${f.consumo ? `, consumo ≥ ${f.consumo} kg/m³` : ""}: cadastre em Preços um item sem FCK com "projetado" na descrição)`);
   else if (f.fck) falta.push(`tipo do concreto (FCK ${nf.format(f.fck)}${f.slump ? `, slump ${f.slump[0]}±${f.slump[1]}` : ""}${f.ac ? `, A/C ${String(f.ac).replace(".", ",")}` : ""}: escolha no contrato)`);
   else falta.push("FCK / tipo do concreto");
   $("#uConc").dataset.manual = ""; $("#uHe").dataset.manual = "";
@@ -2332,13 +2350,13 @@ function parseExtrato(texto) {
   }
   return out;
 }
-const tipoLinhaExtrato = (d) => /BOMBA\s+LAN|LAN[ÇC]A\s+\d/.test(d) && !/MINIMO|M[ÍI]NIMO/.test(d) ? "bomba-lanca" : /MINIMO|M[ÍI]NIMO/.test(d) && /BOMBA/.test(d) ? "minimo" : /BOMBA|MANGOTE|ESTACION/.test(d) ? "bomba-mangote" : /FALTANTE/.test(d) ? "falt" : /DEVOLVID|DEVOLU/.test(d) ? "dev" : /HORA\s*EXTRA|\bH\.?\s?E\b/.test(d) ? "he" : /PERMAN|ESTADIA|HORA PARADA/.test(d) ? "perm" : /\bC\W{0,2}[0-9OIL]{2}\s*\.?\s*B\s*[0-9OIL]{2}|FCK|ESP\s+AC|CONCRETO/.test(d) ? "conc" : "outro";
+const tipoLinhaExtrato = (d) => /BOMBA\s+LAN|LAN[ÇC]A\s+\d/.test(d) && !/MINIMO|M[ÍI]NIMO/.test(d) ? "bomba-lanca" : /MINIMO|M[ÍI]NIMO/.test(d) && /BOMBA/.test(d) ? "minimo" : /BOMBA|MANGOTE|ESTACION/.test(d) ? "bomba-mangote" : /FALTANTE/.test(d) ? "falt" : /DEVOLVID|DEVOLU/.test(d) ? "dev" : /HORA\s*EXTRA|\bH\.?\s?E\b/.test(d) ? "he" : /PERMAN|ESTADIA|HORA PARADA/.test(d) ? "perm" : /\bC\W{0,2}[0-9OIL]{2}\s*\.?\s*B\s*[0-9OIL]{2}|FCK|ESP\s+AC|ESP\s+PROJ|PROJETADO|CONCRETO/.test(d) ? "conc" : "outro";
 async function extrairRemessa(file, pagina) {
   if (pagina) {
     const r = await textoDaPagina(file, pagina);
     const txt = r.text || await ocrImagem(r.canvas);
     const tipo = tipoPagina(txt);
-    if (tipo === "remessa") return Object.assign(parseNotaConcreto(txt), { tipoPagina: tipo });
+    if (tipo === "remessa") return Object.assign(parseNotaConcreto(txt), { tipoPagina: tipo, texto: txt });
     return { tipoPagina: tipo, texto: txt };
   }
   const r = await textoDoArquivo(file);
@@ -2366,7 +2384,7 @@ function lerFaturamento(text) {
   return out;
 }
 let loteLinhas = [], loteValorNF = null;
-const tiposOpc = (forn, sel) => `<option value="">— escolha —</option>` + tiposConcreto(forn).map((p) => { const nome = p.servico ? (SERV_TXT[p.servico] || "Serviço") : "FCK " + nf.format(p.fck) + (p.descricao ? " · " + p.descricao.replace(/^Item [\d.]+ · /, "") : ""); return `<option value="${esc(p.id)}" ${p.id === sel ? "selected" : ""}>${esc(nome)}${forn ? "" : " (" + esc(p.fornecedor) + ")"}</option>`; }).join("");
+const tiposOpc = (forn, sel) => `<option value="">— escolha —</option>` + tiposConcreto(forn).map((p) => { const nome = p.servico ? (SERV_TXT[p.servico] || "Serviço") : nomeItemConc(p); return `<option value="${esc(p.id)}" ${p.id === sel ? "selected" : ""}>${esc(nome)}${forn ? "" : " (" + esc(p.fornecedor) + ")"}</option>`; }).join("");
 const obrasOpc = (sel) => `<option value="">A definir</option>` + obras.filter((o) => o.ativa !== false).sort((a, b) => a.nome.localeCompare(b.nome)).map((o) => `<option value="${esc(o.id)}" ${o.id === sel ? "selected" : ""}>${esc(o.nome)}</option>`).join("");
 function renderLote() {
   const t = $("#ltTabela");
@@ -2541,7 +2559,7 @@ function linhasDoExtrato(ex, arquivo) {
       if (!L) { L = { arquivo: `${arquivo} · extrato`, incluir: true, remessa: x.remessa, fornecedor: forn, obraId: "", peca: "", extras: {}, um: {} }; loteLinhas.push(L); }
       Object.assign(L, { data: L.data || x.data, m3: x.q != null ? x.q : L.m3, fck: f.fck || L.fck || null, traco: f.traco || L.traco || "", descExtrato: x.desc });
       L.ext = L.ext || {}; L.ext.unit = x.unit; L.ext.total = (Number(L.ext.totalAd) || 0) + (Number(x.total) || 0); L.ext.totalConc = x.total;
-      if (!L.precoId && f.fck) { const tp = tracoDoContrato({ ...f, fornecedor: forn }); L.precoId = tp ? tp.id : ""; }
+      if (!L.precoId && (f.fck || f.projetado)) { const tp = tracoDoContrato({ ...f, fornecedor: forn }); L.precoId = tp ? tp.id : ""; }
       L.existente = existenteLote(L);
     } else {
       if (!L) { L = { arquivo: `${arquivo} · extrato`, incluir: true, remessa: x.remessa, data: x.data, fornecedor: forn, obraId: "", peca: "", extras: {}, um: {}, descExtrato: "" }; loteLinhas.push(L); L.existente = existenteLote(L); }
@@ -2575,18 +2593,23 @@ async function lerItensLote(itens) {
     for (let i = 0; i < itens.length; i++) {
       const L = itens[i];
       const fx = folhas.get(L.nome);
-      if (L.pagina && fx && fx.de && fx.lidas.size >= fx.de && !L.forcar && !folhas.forcarTodas) {
+      // o extrato pode ter quantas folhas for: só pula as notas de remessa depois que o extrato acabou
+      // (uma página que não é extrato depois dele) e todas as folhas indicadas no cabeçalho foram lidas
+      if (L.pagina && fx && fx.fim && (!fx.de || fx.lidas.size >= fx.de) && !L.forcar && !folhas.forcarTodas) {
         Object.assign(L, { lendo: false, pulada: true, aviso: "Nota de remessa: não precisou ler, o extrato de fornecimento já trouxe todas as remessas desta NF." }); renderLote(); continue;
       }
       st.className = "status"; st.textContent = `Lendo ${i + 1} de ${itens.length}: ${L.arquivo}… (página escaneada pode levar alguns segundos)`;
       try {
         if (!usouOcr && !sample && !/\.xml$/i.test(L.arquivo)) { await abrirOcrLote().catch(() => null); usouOcr = true; }
         const f = await extrairRemessa(L.file, L.pagina);
+        // continuação do extrato sem o cabeçalho legível: página logo depois de uma folha do extrato com linhas de remessa
+        if (f.tipoPagina !== "extrato" && fx && fx.ultimo === L.pagina - 1 && f.texto && parseExtrato(f.texto).linhas.filter((x) => x.data && (x.q != null || x.total != null)).length >= 1) f.tipoPagina = "extrato";
+        if (f.tipoPagina !== "extrato" && fx && fx.ultimo && L.pagina > fx.ultimo) fx.fim = true;
         if (f.tipoPagina === "extrato") {
           const ex = parseExtrato(f.texto);
-          const g = folhas.get(L.nome) || { de: null, lidas: new Set() }; if (ex.de) g.de = ex.de; g.lidas.add(ex.folha || g.lidas.size + 1); folhas.set(L.nome, g);
+          const g = folhas.get(L.nome) || { de: null, lidas: new Set() }; if (ex.de) g.de = Math.max(g.de || 0, ex.de); g.lidas.add(ex.folha && !g.lidas.has(ex.folha) ? ex.folha : "p" + L.pagina); g.ultimo = L.pagina || g.ultimo; g.fim = false; folhas.set(L.nome, g);
           linhasDoExtrato(ex, L.nome);
-          Object.assign(L, { lendo: false, aviso: `Extrato de fornecimento${ex.folha ? ` (folha ${ex.folha}/${ex.de})` : ""}: ${ex.linhas.length} linha(s) lida(s) e lançadas na tabela.` });
+          Object.assign(L, { lendo: false, aviso: `Extrato de fornecimento${ex.folha ? ` (folha ${ex.folha}/${ex.de})` : ` (pág. ${L.pagina})`}: ${ex.linhas.length} linha(s) lida(s) e lançadas na tabela.` });
         } else if (f.tipoPagina === "faturamento") {
           const info = lerFaturamento(f.texto);
           if (info.numero && !$("#ltNF").value) $("#ltNF").value = info.numero;
@@ -2606,7 +2629,7 @@ async function lerItensLote(itens) {
             Object.assign(L, { lendo: false, aviso: "Página sem remessa reconhecida (ignorada)." });
           } else {
             Object.assign(L, { lendo: false, remessa: f.remessa || "", data: f.data || "", fornecedor: fornPadrao(f.fornecedor || ""), obraId: o ? o.id : "", m3: f.m3 || null, peca: f.peca || "", fck: f.fck || null, chave: f.chave || "", traco: f.traco || "", lacre: f.lacre || "" });
-            const tp = f.fck ? tracoDoContrato({ ...f, fornecedor: L.fornecedor }) : null; L.precoId = tp ? tp.id : "";
+            const tp = f.fck || f.projetado ? tracoDoContrato({ ...f, fornecedor: L.fornecedor }) : null; L.precoId = tp ? tp.id : "";
             L.existente = existenteLote(L);
           }
         }
@@ -2655,6 +2678,7 @@ $("#btnLoteSalvar").onclick = async () => {
   const run = async () => {
     for (const L of sel) {
       try {
+        if (!L.existente) L.existente = existenteLote(L); // confere de novo na hora de salvar: nunca duplica remessa
         if (L.existente) {
           const { id, ...resto } = L.existente;
           const up = { ...resto, atualizadoEm: Date.now() };
