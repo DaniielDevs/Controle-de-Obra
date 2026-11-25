@@ -300,7 +300,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
         <div class="field"><label for="fMes">Mês da remessa</label><input id="fMes" type="month"></div>
         <div class="field grow"><label for="fBusca">Buscar</label><input id="fBusca" type="search" placeholder="Remessa, aplicação, chave…"></div>
         <div class="field"><span style="font-size:12px">&nbsp;</span><button class="btn" type="button" id="btnLimparFiltros">Limpar filtros</button></div>
-        <div class="field" id="capaBox"><span style="font-size:12px">&nbsp;</span><button class="btn primary" type="button" id="btnCapaNF" title="Relatório de fechamento da NF: capa para as remessas impressas">Capa da NF</button></div>
+        <div class="field" id="capaBox"><span style="font-size:12px">&nbsp;</span><button class="btn primary" type="button" id="btnCapaNF" title="Imprime a capa da NF ou um relatório do que está filtrado na tela">Capa / relatório</button></div>
       </div>
       <div class="tbl-wrap"><table id="tblLanc"></table></div>
     </div>
@@ -676,7 +676,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 18h15</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 18h30</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -3265,11 +3265,15 @@ $("#fMes").onchange = renderLancs;
 $("#fNF").oninput = renderLancs;
 // ---------- Capa da NF (relatório de fechamento das remessas de concreto) ----------
 function capaNF() {
+  // usa exatamente o que está filtrado na tela (NF, concreteira, tipo, ensaios, datas, busca)
   const nfq = $("#fNF").value.replace(/\D/g, "").replace(/^0+/, "");
-  if (!nfq) { toast("Digite o nº da NF de faturamento no filtro \"Nota fiscal\" e clique em Capa da NF."); $("#fNF").focus(); return; }
-  const forn = $("#fForn").value;
-  const ls = lancs.filter((l) => l.categoria === "concreto" && String(l.numero || "").replace(/\D/g, "").replace(/^0+/, "") === nfq && (!forn || fornIgual(l.fornecedor || "", forn)));
-  if (!ls.length) { toast(`Nenhuma remessa de concreto com a NF ${nfq}${forn ? " de " + forn : ""}.`); return; }
+  const ls = filteredLancs().filter((l) => l.categoria === "concreto");
+  if (!ls.length) { toast("Nenhuma remessa de concreto com esses filtros."); return; }
+  const selTxt = (id) => { const el = $("#" + id); return el && el.value ? (el.selectedOptions ? el.selectedOptions[0].text : el.value) : ""; };
+  const filtrosTxt = [nfq && `NF ${nfq}`, selTxt("fForn") && `Concreteira: ${selTxt("fForn")}`, selTxt("fTipo") && `Tipo: ${selTxt("fTipo")}`, selTxt("fEns") && `Ensaios: ${selTxt("fEns")}`,
+    ($("#fEmiDe").value || $("#fEmiAte").value) && `Emissão da NF: ${$("#fEmiDe").value ? fmtDate($("#fEmiDe").value) : "…"} a ${$("#fEmiAte").value ? fmtDate($("#fEmiAte").value) : "…"}`,
+    $("#fMes").value && `Mês: ${$("#fMes").value.split("-").reverse().join("/")}`, $("#fBusca").value.trim() && `Busca: "${$("#fBusca").value.trim()}"`, $("#obraGlobal") && $("#obraGlobal").value && `Obra: ${obraNome($("#obraGlobal").value)}`].filter(Boolean);
+  const titulo = nfq ? `Fechamento de concreto · NF ${nfq}` : "Relatório de concreto";
   // Uma capa por fornecedor (a mesma numeração pode existir em duas concreteiras)
   const porForn = [];
   for (const l of ls) { let g = porForn.find((x) => (l.fornecedor ? fornIgual(x.forn, l.fornecedor) : x.forn === "Fornecedor não informado")); if (!g) porForn.push((g = { forn: l.fornecedor || "Fornecedor não informado", ls: [] })); g.ls.push(l); }
@@ -3297,8 +3301,8 @@ function capaNF() {
     const idade = (l) => (l.data ? Math.floor((hoje - new Date(l.data + "T12:00:00")) / 864e5) : 999);
     const prazo = { d7: 7, d28: 28 };
     const AG = (l, k) => { const d = new Date(l.data + "T12:00:00"); d.setDate(d.getDate() + prazo[k]); return `<span class="ag">Previsto ${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}</span>`; };
-    const ens = (l, k) => { const v = cps(l, k); if (!v.length) return idade(l) < prazo[k] ? AG(l, k) : NL; const m = Math.max(...v), f = n2(l.fckProjeto); return k === "d28" && f ? `<span class="${m >= f ? "okk" : "bad"}">${nf.format(m)}</span>` : nf.format(m); };
-    const sit = (l) => { const f = n2(l.fckProjeto), v28 = cps(l, "d28"); if (!v28.length) return idade(l) < 28 ? "ag" : "nl"; return f ? (Math.max(...v28) >= f ? "ok" : "abaixo") : "sem-fck"; };
+    const ens = (l, k) => { const v = cps(l, k); if (!v.length && !Number(l.qtd)) return "—"; /* linha só de m³ faltante: não tem ensaio */ if (!v.length) return idade(l) < prazo[k] ? AG(l, k) : NL; const m = Math.max(...v), f = n2(l.fckProjeto); return k === "d28" && f ? `<span class="${m >= f ? "okk" : "bad"}">${nf.format(m)}</span>` : nf.format(m); };
+    const sit = (l) => { const f = n2(l.fckProjeto), v28 = cps(l, "d28"); if (!v28.length && !Number(l.qtd)) return "sem-fck"; if (!v28.length) return idade(l) < 28 ? "ag" : "nl"; return f ? (Math.max(...v28) >= f ? "ok" : "abaixo") : "sem-fck"; };
     const SIT = { ok: '<span class="okk">Atingiu</span>', abaixo: '<span class="bad">Abaixo do FCK</span>', nl: NL, ag: '<span class="ag">Aguardando</span>', "sem-fck": "—" };
     const contaEns = (xs) => { const c = { ok: 0, abaixo: 0, nl: 0, ag: 0, "sem-fck": 0 }; for (const l of xs) if (!l.servico) c[sit(l)]++; return c; };
     const txtEns = (c) => `${c.ok} atingiram${c.abaixo ? ` · <span class="bad">${c.abaixo} abaixo</span>` : ""}${c.nl ? ` · <span class="bad">${c.nl} não localizado(s)</span>` : ""}${c.ag ? ` · ${c.ag} aguardando 28 dias` : ""}`;
@@ -3312,14 +3316,14 @@ function capaNF() {
       ${ss.map((g) => `<tr class="srv"><td colspan="5"><b>Bomba:</b> ${esc(g.k)} · ${g.n} lançamento(s)${g.at.length ? ` · <b>atendeu as remessas ${esc([...new Set(g.at)].join(", "))}</b>` : ""}${g.rem.length ? ` <span class="rem">(bomba ${esc([...new Set(g.rem)].join(", "))})</span>` : ""}</td><td class="n">${g.m3 ? nf.format(g.m3) + " m³ bomb." : "—"}</td><td></td><td class="n">${money(g.v)}</td><td colspan="4"></td></tr>`).join("")}
       </tbody><tfoot><tr><td colspan="5">Subtotal ${esc(o.nome)}</td><td class="n">${m3(vol(o.ls))}</td><td class="n">${vol(cs) ? money(val(cs) / vol(cs)) : ""}</td><td class="n">${money(val(o.ls))}</td><td colspan="4" class="ensr">${cs.length ? "Ensaios 28d: " + txtEns(contaEns(cs)) : ""}</td></tr></tfoot></table>`; }).join("");
     return `<section class="pg">
-      <header><img src="${logo}" alt=""><div><div class="emp">Tranenge · UN 464 · Duplicação BR-153</div><h1>Fechamento de concreto · NF ${esc(nfq)}</h1></div></header>
+      <header><img src="${logo}" alt=""><div><div class="emp">Tranenge · UN 464 · Duplicação BR-153</div><h1>${esc(titulo)}</h1>${filtrosTxt.length && !(nfq && filtrosTxt.length === 1) ? `<div class="emp">Filtros: ${esc(filtrosTxt.join(" · "))}</div>` : ""}</div></header>
       <div class="cards">
         <div><small>Concreteira</small><b>${esc(g.forn)}</b></div>
-        <div><small>Nota fiscal</small><b>NF ${esc(nfq)}</b><span>${emis.length ? "emitida em " + dt(emis[0]) : "data de emissão não informada"}</span></div>
+        <div><small>Nota fiscal</small>${nfq ? `<b>NF ${esc(nfq)}</b><span>${emis.length ? "emitida em " + dt(emis[0]) : "data de emissão não informada"}</span>` : (() => { const nfs = [...new Set(rs.map((l) => l.numero).filter(Boolean))]; return `<b>${nfs.length ? nfs.length + " NF(s)" : "Sem NF"}</b><span>${esc(nfs.slice(0, 6).join(", "))}${nfs.length > 6 ? "…" : ""}${rs.some((l) => !l.numero) ? " · há remessas sem NF" : ""}</span>`; })()}</div>
         <div><small>Período das remessas</small><b>${datas.length ? dt(datas[0]) + (datas[datas.length - 1] !== datas[0] ? " a " + dt(datas[datas.length - 1]) : "") : "—"}</b></div>
         <div><small>Remessas</small><b>${nRem(rs)}</b><span>${obrasG.length} obra(s)${rs.length - nRem(rs) ? " · " + (rs.length - nRem(rs)) + " serviço(s) de bomba" : ""}</span></div>
         <div><small>Volume concretado</small><b>${m3(totM)}</b><span>Ensaios 28d: ${txtEns(contaEns(rs))}</span></div>
-        <div class="dest"><small>Valor da NF (lançado)</small><b>${money(totV)}</b>${reidi > 0.004 ? `<span>já com desconto REIDI de ${money(reidi)}</span>` : ""}</div>
+        <div class="dest"><small>${nfq ? "Valor da NF (lançado)" : "Valor lançado"}</small><b>${money(totV)}</b>${reidi > 0.004 ? `<span>já com desconto REIDI de ${money(reidi)}</span>` : ""}</div>
       </div>
       <h2>Resumo por obra</h2>
       <table><thead><tr><th>Obra</th><th class="n">Remessas</th><th class="n">Volume</th><th class="n">Concreto</th><th class="n">Bomba</th><th class="n">Total</th><th class="n">% da NF</th><th>Ensaios de 28 dias</th></tr></thead><tbody>${resumo}</tbody>
@@ -3329,7 +3333,7 @@ function capaNF() {
       <footer>Gerado pelo Controle de Obra em ${agora.toLocaleDateString("pt-BR")} às ${agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}${quem ? " · " + esc(quem) : ""} · As remessas impressas seguem anexas a esta capa.</footer>
     </section>`;
   }).join("");
-  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Capa NF ${esc(nfq)}</title><style>
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(nfq ? "Capa NF " + nfq : "Relatório de concreto")}</title><style>
     @page { size: A4 landscape; margin: 10mm; }
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; } body { font: 11px/1.4 "Segoe UI", Arial, sans-serif; color: #1c2333; margin: 0; }
     .barra { position: sticky; top: 0; background: #253a74; color: #fff; padding: 10px 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
@@ -3349,7 +3353,7 @@ function capaNF() {
     .ass { display: grid; grid-template-columns: 1fr 1fr 160px; gap: 22px; margin-top: 34px; page-break-inside: avoid; } .ass div { text-align: center; color: #3b4560; } .ass span { display: block; border-top: 1px solid #1c2333; margin-bottom: 4px; height: 0; }
     footer { margin-top: 14px; color: #8a92a6; font-size: 9.5px; text-align: center; }
     @media print { .barra { display: none; } .pg { padding-top: 0; } }
-  </style></head><body><div class="barra"><span>Capa da NF ${esc(nfq)} · confira e imprima (ou salve em PDF)</span><button onclick="print()">Imprimir / salvar PDF</button></div>${paginas}</body></html>`;
+  </style></head><body><div class="barra"><span>${esc(nfq ? "Capa da NF " + nfq : "Relatório de concreto")} · confira e imprima (ou salve em PDF)</span><button onclick="print()">Imprimir / salvar PDF</button></div>${paginas}</body></html>`;
   const w = window.open("", "_blank");
   if (!w) { toast("O navegador bloqueou a janela do relatório: permita pop-ups para este site."); return; }
   w.document.open(); w.document.write(html); w.document.close();
