@@ -675,7 +675,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 17h00</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 17h15</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -1695,7 +1695,8 @@ function prepOcr(img, rot) {
   try { const d = g.getImageData(0, 0, cv.width, cv.height), a = d.data; for (let i = 0; i < a.length; i += 4) { const m = Math.max(a[i], a[i + 1], a[i + 2]); a[i] = a[i + 1] = a[i + 2] = m; } g.putImageData(d, 0, 0); } catch {}
   return cv;
 }
-const notaOcr = (t) => (String(t).toUpperCase().match(/DANFE|CHAVE DE ACESSO|EMISS[ÃA]O|NOTA FISCAL|REMESSA|DESTINAT|CNPJ|PROTOCOLO|DACTE|CONHECIMENTO|VALOR TOTAL/g) || []).length;
+const notaOcr = (t) => (String(t).toUpperCase().match(/DANFE|CHAVE DE ACESSO|EMISS[ÃA]O|NOTA FISCAL|REMESSA|DESTINAT|CNPJ|PROTOCOLO|DACTE|CONHECIMENTO|VALOR TOTAL|EXTRATO|FORNECIMENTO/g) || []).length
+  + Math.min(5, (String(t).match(/\d{9,10}\b[^\n]*\d{2}[.\/]\d{2}[.\/]\d{4}/g) || []).length); // linhas de tabela de extrato também contam
 async function ocrImagem(img) {
   const T = await loadTesseract();
   const temp = !ocrWorkerLote;
@@ -2316,7 +2317,16 @@ function parseExtrato(texto) {
   const U = String(texto || "").toUpperCase().replace(/\r/g, "");
   const folha = U.match(/FOLHA\s*:?\s*(\d+)\s*\/\s*(\d+)/);
   const out = { folha: folha ? Number(folha[1]) : null, de: folha ? Number(folha[2]) : null, linhas: [] };
-  for (const raw of U.split("\n")) {
+  // linha da tabela quebrada em duas pelo OCR: junta a continuação (sem nº de remessa) com a linha de cima
+  const brutas = U.split("\n"), juntas = [];
+  for (let i = 0; i < brutas.length; i++) {
+    let ln = brutas[i];
+    if (/\d{9,10}\b.*?\d{2}[.\/]\d{2}[.\/]\d{4}/.test(ln) && !/\d[.,]\d{2}\s*\W*$/.test(ln)) {
+      for (let j = i + 1; j < Math.min(brutas.length, i + 4); j++) { const nx = brutas[j]; if (!nx.trim()) continue; if (/\d{9,10}\b/.test(nx)) break; if (/\d[.,]\d{2}/.test(nx)) { ln += " " + nx; i = j; } break; }
+    }
+    juntas.push(ln);
+  }
+  for (const raw of juntas) {
     const m = raw.match(/(\d{9,10})\b.*?(\d{2})[.\/](\d{2})[.\/](\d{4})\s*[|\[(]?\s*(.+)$/); if (!m) continue;
     let resto = m[5], q = null, un = null, tot = null, um = "";
     // números do fim da linha: quantidade, unitário e total (ignora "|", "M3", "NM3"…)
@@ -2332,7 +2342,7 @@ function parseExtrato(texto) {
     if (nums.length >= 2) {
       resto = tk.slice(0, k + 1).join(" ");
       const v = nums.map((x) => numExtrato(x));
-      const plaus = (x) => x != null && x > 0 && x <= 60 && Math.abs(x * 4 - Math.round(x * 4)) < 0.03; // m³/h em múltiplos de 0,25
+      const plaus = (x) => x != null && x > 0 && x <= 400 && Math.abs(x * 4 - Math.round(x * 4)) < 0.03; // m³/h em múltiplos de 0,25 (bomba pode passar de 100 m³)
       const fecha = (a1, u, t) => a1 != null && u && t != null && Math.abs(a1 * u - t) <= Math.max(0.05, t * 0.01);
       if (v.length === 3 && plaus(v[0]) && fecha(v[0], v[1], v[2])) { q = v[0]; un = v[1]; tot = v[2]; }
       else if (v.length === 3 && v[2] == null && plaus(v[0]) && v[1]) { q = v[0]; un = v[1]; tot = Math.round(q * un * 100) / 100; }
@@ -2341,6 +2351,7 @@ function parseExtrato(texto) {
         const n = v.length; let ach = null;
         for (const [iu, it] of [[n - 2, n - 1], [0, n - 1], [0, 1], [1, 2]]) { const u = v[iu], t = v[it]; if (iu !== it && u && t && t > u && it < n) { const q2 = Math.round((t / u) * 100) / 100; if (plaus(q2)) { ach = [q2, u, t]; break; } } }
         if (ach) [q, un, tot] = ach;
+        else if (n === 3 && plaus(v[0]) && v[2]) { q = v[0]; tot = v[2]; un = Math.round((tot / q) * 100) / 100; } // unitário ilegível: total ÷ quantidade
         else if (n === 3 && plaus(v[0]) && v[1]) { q = v[0]; un = v[1]; tot = Math.round(v[0] * v[1] * 100) / 100; }
         else { q = null; un = v[n - 2]; tot = v[n - 1]; }
       }
