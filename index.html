@@ -559,6 +559,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
         <select id="ltObraTodas" style="max-width:220px"></select><button class="btn" type="button" id="btnLtObra">Aplicar obra</button>
         <select id="ltTipoTodas" style="max-width:260px"></select><button class="btn" type="button" id="btnLtTipo">Aplicar tipo (só concreto)</button>
         <span class="muted" style="font-size:12px">Só preenche onde está vazio.</span>
+        <button class="btn" type="button" id="btnLtTexto" title="Baixa o texto que o sistema leu de cada página, para conferir ou mandar para análise">Baixar texto lido</button>
         <button class="btn" type="button" id="btnLtPuladas" hidden>Ler também as notas de remessa puladas</button></div>
       <div class="tbl-wrap"><table id="ltTabela"></table></div>
     </div>
@@ -675,7 +676,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 17h15</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 17h30</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -2366,6 +2367,7 @@ async function extrairRemessa(file, pagina) {
   if (pagina) {
     const r = await textoDaPagina(file, pagina);
     const txt = r.text || await ocrImagem(r.canvas);
+    textosLidos.push(`===== ${file.name} · página ${pagina} (${r.text ? "texto do PDF" : "OCR"}) =====\n${txt}`);
     const tipo = tipoPagina(txt);
     if (tipo === "remessa") return Object.assign(parseNotaConcreto(txt), { tipoPagina: tipo, texto: txt });
     return { tipoPagina: tipo, texto: txt };
@@ -2394,7 +2396,7 @@ function lerFaturamento(text) {
   out.remessas = [...new Set((U.match(/REMESSA[S]?[^\n]{0,400}/g) || []).join(" ").match(/\b\d{4,6}\b/g) || [])];
   return out;
 }
-let loteLinhas = [], loteValorNF = null;
+let loteLinhas = [], loteValorNF = null, textosLidos = [];
 const tiposOpc = (forn, sel) => `<option value="">— escolha —</option>` + tiposConcreto(forn).map((p) => { const nome = p.servico ? (SERV_TXT[p.servico] || "Serviço") : nomeItemConc(p); return `<option value="${esc(p.id)}" ${p.id === sel ? "selected" : ""}>${esc(nome)}${forn ? "" : " (" + esc(p.fornecedor) + ")"}</option>`; }).join("");
 const obrasOpc = (sel) => `<option value="">A definir</option>` + obras.filter((o) => o.ativa !== false).sort((a, b) => a.nome.localeCompare(b.nome)).map((o) => `<option value="${esc(o.id)}" ${o.id === sel ? "selected" : ""}>${esc(o.nome)}</option>`).join("");
 function renderLote() {
@@ -2455,6 +2457,11 @@ function atualizaMassaLote() {
   const np = loteLinhas.filter((L) => L.pulada).length; $("#btnLtPuladas").hidden = !np; $("#btnLtPuladas").textContent = `Ler também as ${np} notas de remessa puladas (procura remessa faltando, mais lento)`;
   $("#ltTipoTodas").innerHTML = tiposOpc(forn, "").replace("— escolha —", "Tipo do concreto…").replace(/<option value="[^"]*">(?:Bombeamento|Adicional|M³|Outro)[^<]*<\/option>/g, "");
 }
+$("#btnLtTexto").onclick = () => {
+  if (!textosLidos.length) { toast("Nenhuma página lida ainda."); return; }
+  const b = new Blob([textosLidos.join("\n\n")], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `texto-lido-NF-${$("#ltNF").value || "lote"}.txt`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+};
 $("#btnLtPuladas").onclick = () => {
   const its = loteLinhas.filter((L) => L.pulada);
   its.forEach((L) => { delete L.aviso; delete L.pulada; L.lendo = true; L.forcar = true; });
@@ -2658,7 +2665,7 @@ async function lerItensLote(itens) {
   renderLote();
   st.className = "status ok"; st.textContent = `${itens.length} arquivo(s)/página(s) lido(s). Confira a tabela, corrija o que precisar e clique em "Salvar lançamentos".`;
 }
-$("#btnLote").onclick = () => { loteLinhas = []; loteValorNF = null; $("#ltNF").value = ""; $("#ltData").value = ""; $("#ltStatus").textContent = ""; $("#ltNFStatus").textContent = ""; $("#ltRemessas").value = ""; $("#ltFile").value = ""; setCat("concreto"); renderLote(); openModal("mLote"); };
+$("#btnLote").onclick = () => { loteLinhas = []; loteValorNF = null; textosLidos = []; $("#ltNF").value = ""; $("#ltData").value = ""; $("#ltStatus").textContent = ""; $("#ltNFStatus").textContent = ""; $("#ltRemessas").value = ""; $("#ltFile").value = ""; setCat("concreto"); renderLote(); openModal("mLote"); };
 $("#ltRemessas").addEventListener("change", (e) => { if (e.target.files.length) processarLote(e.target.files); e.target.value = ""; });
 const dropL = $("#dropLote");
 ["dragenter", "dragover"].forEach((ev) => dropL.addEventListener(ev, (e) => { e.preventDefault(); dropL.classList.add("over"); }));
