@@ -312,8 +312,8 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
       <p class="status" id="reidiMsg" aria-live="polite" style="padding:0 16px 12px;margin:0"></p>
     </div>
     <div class="panel" id="btPanel">
-      <div class="panel-h"><div><h3>Mínimos: betoneira (BT) e bomba lança</h3><p class="hint" style="margin:2px 0 0">Remessa abaixo do mínimo da BT: a diferença vira <b>m³ faltante</b> (vazio = 6 m³). Bomba lança abaixo do mínimo: a diferença vira <b>adicional de volume mínimo de bomba</b> (vazio = 40 m³). Os dois são calculados automaticamente.</p></div>
-        <button class="btn small primary" type="button" id="btnSalvarBT">Salvar mínimo da BT</button></div>
+      <div class="panel-h"><div><h3>Regras de cada concreteira: mínimo da betoneira (BT) e da bomba lança</h3><p class="hint" style="margin:2px 0 0">Remessa abaixo do mínimo da BT: a diferença vira <b>m³ faltante</b> (vazio = 6 m³). Bomba lança abaixo do mínimo: a diferença vira <b>adicional de volume mínimo de bomba</b> (vazio = 40 m³). Os dois são calculados automaticamente.</p></div>
+        <button class="btn small primary" type="button" id="btnSalvarBT">Salvar regras</button></div>
       <div class="panel-b" id="btBox" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px"></div>
       <p class="status" id="btMsg" aria-live="polite" style="padding:0 16px 12px;margin:0"></p>
     </div>
@@ -663,7 +663,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 13h45</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 14h00</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -704,7 +704,9 @@ const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getT
 const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
 
 let db = null, sample = null, sbClient = null, nfesExtrasCache = [];
-let btCfg = { padrao: 6, fornecedores: {}, bombaPadrao: 40, bomba: {} };
+// Regras de cada concreteira (padrão inicial; o usuário altera em Preços → Concreto)
+const BT_PADRAO = { padrao: 6, fornecedores: { Engemix: 5, "Concreto Freitas": 6 }, bombaPadrao: 40, bomba: { Engemix: 40, "Concreto Freitas": 40 } };
+let btCfg = JSON.parse(JSON.stringify(BT_PADRAO));
 let obras = [], lancs = [], orc = {}, precos = [], reidi = {}, notasNFe = [], orcVersionLoaded = false;
 let loaded = { obras: false, lancs: false };
 let resumoCat = "frete";
@@ -2869,7 +2871,7 @@ $("#btnSalvarBT").onclick = async () => {
   const msg = $("#btMsg");
   if (!db) { msg.className = "status err"; msg.textContent = "Banco de dados indisponível."; return; }
   const novo = {}, nb = {}; $$("#btBox input").forEach((i) => { const v = parseNum(i.value); if (v) (i.dataset.t === "bomba" ? nb : novo)[i.dataset.forn] = v; });
-  try { await db.doc("config/bt").set({ padrao: 6, fornecedores: novo, bombaPadrao: 40, bomba: nb, atualizadoEm: Date.now() }); btCfg = { padrao: 6, fornecedores: novo, bombaPadrao: 40, bomba: nb }; msg.className = "status ok"; msg.textContent = "Mínimo da BT salvo. Vale para os próximos lançamentos."; }
+  try { await db.doc("config/bt").set({ padrao: 6, fornecedores: novo, bombaPadrao: 40, bomba: nb, atualizadoEm: Date.now() }); btCfg = { padrao: 6, fornecedores: novo, bombaPadrao: 40, bomba: nb }; msg.className = "status ok"; msg.textContent = "Regras salvas. Valem para os próximos lançamentos."; }
   catch (err) { msg.className = "status err"; msg.textContent = dbErr(err); }
 };
 function renderReidi() {
@@ -3282,7 +3284,7 @@ function conectar(banco) {
     orc = snap.exists ? snap.data() : {};
     renderAll();
   }, onErr);
-  db.doc("config/bt").onSnapshot((snap) => { btCfg = { padrao: 6, fornecedores: {}, bombaPadrao: 40, bomba: {}, ...(snap.exists ? snap.data() : {}) }; renderAll(); }, () => {});
+  db.doc("config/bt").onSnapshot((snap) => { btCfg = snap.exists ? { ...JSON.parse(JSON.stringify(BT_PADRAO)), ...snap.data() } : JSON.parse(JSON.stringify(BT_PADRAO)); renderAll(); }, () => {});
   db.doc("config/reidi").onSnapshot((snap) => { reidi = snap.exists ? (snap.data().fornecedores || {}) : {}; renderAll(); }, () => {});
   db.collection("notas").onSnapshot((snap) => { notasNFe = snap.docs.map((d) => ({ id: d.id, ...d.data() })); if (!$("#mBiblio").hidden) renderBiblio(); }, () => {});
   db.collection("precos").onSnapshot((snap) => {
