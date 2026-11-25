@@ -675,7 +675,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 16h00</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 16h15</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -963,6 +963,25 @@ function filteredLancs() {
     return true;
   }).sort(sortLanc);
 }
+// Ordenação por coluna (clique no título: maior → menor, menor → maior)
+const num = (v) => (v == null || v === "" || !Number(v) ? null : Number(v)); // vazio ou zero vai para o fim
+const ens28 = (l) => ensMax((l.ensaios || {}).d28), ens7 = (l) => ensMax((l.ensaios || {}).d7);
+const ORDEM = {
+  frete: [(l) => l.data, (l) => num(l.numero), (l) => num(((l.nfsTransp || [])[0] || {}).numero), (l) => obraNome(l.obraId), (l) => num(l.qtd), (l) => MAT_TXT[matFrete(l)], (l) => l.fornecedor || "", (l) => num(l.valor)],
+  concreto: [(l) => num(l.remessa), (l) => num(l.numero), (l) => obraNome(l.obraId), (l) => l.fornecedor || "", (l) => l.peca || l.descricao || "", (l) => num(l.fckProjeto), (l) => num(l.servico ? l.m3Bombeado : l.qtd), ens7, ens28, (l) => num(l.valor)],
+  aco: [(l) => l.data, (l) => obraNome(l.obraId), (l) => num(l.numero), (l) => l.fornecedor || "", (l) => tipoDe(l), (l) => l.peca || "", (l) => num(l.qtd), (l) => num(l.valor)],
+};
+let ordemLanc = (() => { try { return JSON.parse(localStorage.getItem("ordemLanc") || "{}"); } catch { return {}; } })(); // { cat: { col, dir } }
+function ordenaLancs(ls) {
+  const o = ordemLanc[lancCat]; if (!o || !ORDEM[lancCat][o.col]) return ls;
+  const f = ORDEM[lancCat][o.col], d = o.dir === "asc" ? 1 : -1;
+  return ls.slice().sort((a, b) => {
+    const x = f(a), y = f(b);
+    if (x == null || x === "") return y == null || y === "" ? 0 : 1; // vazios sempre no fim
+    if (y == null || y === "") return -1;
+    return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "pt-BR", { numeric: true })) * d;
+  });
+}
 function renderLancs() {
   fillFiltros();
   $$("#segLanc button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.cat === lancCat)));
@@ -970,12 +989,20 @@ function renderLancs() {
   $("#lancSub").textContent = L.sub;
   $("#btnNovoLanc2").textContent = "+ Novo lançamento de " + CATS[lancCat].nome.toLowerCase();
   $("#btnImpEns").hidden = lancCat !== "concreto"; $("#btnLote").hidden = lancCat !== "concreto"; $("#btnBiblio").hidden = lancCat !== "frete";
-  const ls = filteredLancs();
+  const ls = ordenaLancs(filteredLancs());
   const t = $("#tblLanc");
   const temCat = lancs.some((l) => l.categoria === lancCat);
   if (!ls.length) { t.innerHTML = `<tbody><tr><td class="empty">${temCat ? "Nenhum lançamento com esses filtros." : `Nenhum lançamento de ${CATS[lancCat].nome.toLowerCase()} ainda.`}</td></tr></tbody>`; return; }
-  const head = L.head.map((h) => h.startsWith("n:") ? `<th class="n">${h.slice(2)}</th>` : `<th>${h ? h : '<span class="sr">Ações</span>'}</th>`).join("");
+  const o = ordemLanc[lancCat] || {};
+  const head = L.head.map((h, i) => { const n = h.startsWith("n:"), txt = n ? h.slice(2) : h; if (!txt) return `<th><span class="sr">Ações</span></th>`; const at = o.col === i; return `<th class="${n ? "n " : ""}ordenavel" data-col="${i}" title="Clique para ordenar" style="cursor:pointer;user-select:none;white-space:nowrap">${txt}<span style="opacity:${at ? 1 : 0.3};margin-left:3px">${at ? (o.dir === "asc" ? "▲" : "▼") : "↕"}</span></th>`; }).join("");
   t.innerHTML = `<thead><tr>${head}</tr></thead><tbody>${ls.map((l) => `<tr>${L.row(l)}</tr>`).join("")}</tbody><tfoot><tr>${L.foot(ls)}</tr></tfoot>`;
+  t.querySelectorAll("th.ordenavel").forEach((th) => (th.onclick = () => {
+    const col = Number(th.dataset.col), cur = ordemLanc[lancCat];
+    // 1º clique: maior → menor; 2º: menor → maior; 3º: volta à ordem padrão
+    ordemLanc[lancCat] = !cur || cur.col !== col ? { col, dir: "desc" } : cur.dir === "desc" ? { col, dir: "asc" } : null;
+    try { localStorage.setItem("ordemLanc", JSON.stringify(ordemLanc)); } catch {}
+    renderLancs();
+  }));
   bindRowClicks(t);
 }
 $$("#segLanc button").forEach((b) => (b.onclick = () => { lancCat = b.dataset.cat; $("#fForn").value = ""; $("#fTipo").value = ""; $("#fNF").value = ""; try { localStorage.setItem("lancCat", lancCat); } catch {} renderLancs(); }));
