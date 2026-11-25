@@ -676,7 +676,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 17h30</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 17h45</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -2318,28 +2318,48 @@ function parseExtrato(texto) {
   const U = String(texto || "").toUpperCase().replace(/\r/g, "");
   const folha = U.match(/FOLHA\s*:?\s*(\d+)\s*\/\s*(\d+)/);
   const out = { folha: folha ? Number(folha[1]) : null, de: folha ? Number(folha[2]) : null, linhas: [] };
+  // decimais separados pelo OCR: "4844. 48" / "4844 .48" → "4844.48"
+  const U2 = U.replace(/(\d[.,])\s+(\d{2})(?!\d)/g, "$1$2").replace(/(\d)\s+([.,]\d{2})(?!\d)/g, "$1$2");
+  const idData = /^\W*(\d{9,10})\W+(?:\d{3}\W+)?(\d{2})[.\/](\d{2})[.\/](\d{4})\W*$/;
+  let brutas = U2.split("\n");
+  // tabela lida coluna por coluna (lista de "remessa data" e depois lista de "descrição … total"): junta em linhas
+  const ids = brutas.filter((l) => idData.test(l));
+  if (ids.length >= 3) {
+    const fimIds = brutas.lastIndexOf(ids[ids.length - 1]);
+    const descs = brutas.slice(fimIds + 1).filter((l) => /[A-Z]{3,}/.test(l) && /\d[.,]\d{2}\W*$/.test(l) && !/\d{9,10}\b/.test(l));
+    if (descs.length >= Math.min(ids.length, 3)) {
+      const comb = ids.map((l, i) => { const m = l.match(idData); return descs[i] ? `${m[1]} ${m[2]}.${m[3]}.${m[4]} | ${descs[i]}` : `${m[1]} ${m[2]}.${m[3]}.${m[4]} |`; });
+      brutas = brutas.filter((l) => !idData.test(l) && !descs.includes(l)).concat(comb);
+    }
+  }
   // linha da tabela quebrada em duas pelo OCR: junta a continuação (sem nº de remessa) com a linha de cima
-  const brutas = U.split("\n"), juntas = [];
+  const juntas = [];
   for (let i = 0; i < brutas.length; i++) {
     let ln = brutas[i];
     if (/\d{9,10}\b.*?\d{2}[.\/]\d{2}[.\/]\d{4}/.test(ln) && !/\d[.,]\d{2}\s*\W*$/.test(ln)) {
-      for (let j = i + 1; j < Math.min(brutas.length, i + 4); j++) { const nx = brutas[j]; if (!nx.trim()) continue; if (/\d{9,10}\b/.test(nx)) break; if (/\d[.,]\d{2}/.test(nx)) { ln += " " + nx; i = j; } break; }
+      let ok = false;
+      for (let j = i + 1; j < Math.min(brutas.length, i + 4); j++) { const nx = brutas[j]; if (!nx.trim()) continue; if (/\d{9,10}\b/.test(nx)) break; if (/\d[.,]\d{2}/.test(nx)) { ln += " " + nx; i = j; ok = true; } break; }
+      // números que o OCR jogou na linha de cima (sem nº de remessa)
+      if (!ok) for (let j = juntas.length - 1; j >= Math.max(0, juntas.length - 3); j--) { const pv = juntas[j]; if (!pv.trim()) continue; if (!/\d{9,10}\b/.test(pv) && !/[A-Z]{3,}/.test(pv) && (pv.match(/\d[.,]\d{2}/g) || []).length >= 1) { ln += " " + pv; juntas.splice(j, 1); } break; }
     }
     juntas.push(ln);
   }
   for (const raw of juntas) {
     const m = raw.match(/(\d{9,10})\b.*?(\d{2})[.\/](\d{2})[.\/](\d{4})\s*[|\[(]?\s*(.+)$/); if (!m) continue;
+    if (/[A-Z]{3,}/.test(raw.slice(0, raw.indexOf(m[1])))) continue; // nº de remessa vem no começo da linha (evita "Valor da Fatura … 9064858259")
     let resto = m[5], q = null, un = null, tot = null, um = "";
     // números do fim da linha: quantidade, unitário e total (ignora "|", "M3", "NM3"…)
     const tk = resto.trim().split(/\s+/), nums = [];
     let k = tk.length - 1;
     for (; k >= 0 && nums.length < 3; k--) {
       const t = tk[k].replace(/[|\]\[)(]+$/g, "").replace(/^[|\]\[(]+/g, "");
-      if (/^\d[\d.,]*$/.test(t)) { nums.unshift(t); continue; }
+      // número sem vírgula/ponto no lugar do unitário é parte da descrição (ex.: "BOMBA 5118")
+      if (/^\d[\d.,]*$/.test(t) && !(nums.length === 1 && !/[.,]/.test(t))) { nums.unshift(t); continue; }
       if (/^[A-Z]{1,2}\d{2,}[\d.,]*$/.test(t) && nums.length === 0) { nums.unshift("?"); continue; } // total ilegível (ex.: "e1719")
       if (!t || /^[^A-Z0-9]*$/.test(t) || /^[A-Z]{0,2}M[3³S]$/.test(t) || /^(H|HR|HS|UN|VB|KG|M2)$/.test(t)) { if (/M[3³S]$|^(H|HR|HS|UN|VB|KG|M2)$/.test(t)) um = t; continue; }
       break;
     }
+    if (nums.length === 1) { resto = tk.slice(0, k + 1).join(" "); tot = numExtrato(nums[0]); }
     if (nums.length >= 2) {
       resto = tk.slice(0, k + 1).join(" ");
       const v = nums.map((x) => numExtrato(x));
@@ -2350,7 +2370,7 @@ function parseExtrato(texto) {
       else {
         // escolhe unitário e total entre os números lidos de forma que total ÷ unitário dê uma quantidade plausível
         const n = v.length; let ach = null;
-        for (const [iu, it] of [[n - 2, n - 1], [0, n - 1], [0, 1], [1, 2]]) { const u = v[iu], t = v[it]; if (iu !== it && u && t && t > u && it < n) { const q2 = Math.round((t / u) * 100) / 100; if (plaus(q2)) { ach = [q2, u, t]; break; } } }
+        for (const [iu, it] of [[n - 2, n - 1], [0, n - 1], [0, 1], [1, 2]]) { const u = v[iu], t = v[it]; if (iu !== it && u && t && t >= u && it < n) { const q2 = Math.round((t / u) * 100) / 100; if (plaus(q2)) { ach = [q2, u, t]; break; } } }
         if (ach) [q, un, tot] = ach;
         else if (n === 3 && plaus(v[0]) && v[2]) { q = v[0]; tot = v[2]; un = Math.round((tot / q) * 100) / 100; } // unitário ilegível: total ÷ quantidade
         else if (n === 3 && plaus(v[0]) && v[1]) { q = v[0]; un = v[1]; tot = Math.round(v[0] * v[1] * 100) / 100; }
@@ -2358,6 +2378,7 @@ function parseExtrato(texto) {
       }
     }
     const desc = resto.replace(/^[^A-Z]+/, "").replace(/\s{2,}/g, " ").trim();
+    if (!/[A-Z]{3,}/.test(desc)) continue; // não é linha de fornecimento (ex.: dados do boleto no topo do extrato)
     out.linhas.push({ remessa: String(Number(m[1])), data: dataOk(m[2], m[3], m[4]) ? `${m[4]}-${m[3]}-${m[2]}` : "", desc, q, unit: un, total: tot, um });
   }
   return out;
@@ -2557,7 +2578,27 @@ function linhaParaLanc(L) {
 }
 const chaveLote = (L) => remKey(L.remessa) + "|" + (L.servicoTipo || "");
 function existenteLote(L) { return lancs.find((l) => l.categoria === "concreto" && remKey(l.remessa) === remKey(L.remessa) && (L.servicoTipo ? !!l.servico && (l.servico === L.servicoTipo || !l.servico) : !l.servico)) || null; }
+// Unitários já vistos no extrato (por descrição): servem para achar a quantidade quando o OCR só leu o total
+let unitsExtrato = new Map();
+const normDesc = (d) => String(d || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/O(?=\d)/g, "0").replace(/(?<=\d)O/g, "0");
+const qPlaus = (q) => q > 0 && q <= 400 && Math.abs(q * 4 - Math.round(q * 4)) < 0.02;
+function completaQtd(ex, forn) {
+  for (const x of ex.linhas) if (x.q != null && x.unit) { const k = normDesc(x.desc); if (!unitsExtrato.has(k)) unitsExtrato.set(k, new Set()); unitsExtrato.get(k).add(x.unit); if (/BOMBA/.test(x.desc)) { if (!unitsExtrato.has("BOMBA")) unitsExtrato.set("BOMBA", new Set()); unitsExtrato.get("BOMBA").add(x.unit); } }
+  // bomba lança + adicional mínimo da mesma bomba somam o mínimo (ex.: 40 m³) e têm o mesmo unitário
+  const porRem = new Map(); for (const x of ex.linhas) if (/BOMBA/.test(x.desc)) { if (!porRem.has(x.remessa)) porRem.set(x.remessa, []); porRem.get(x.remessa).push(x); }
+  for (const g of porRem.values()) if (g.length === 2 && g.every((x) => x.q == null && x.total)) {
+    const u = Math.round(((g[0].total + g[1].total) / minBomba(forn)) * 100) / 100, qs = g.map((x) => Math.round((x.total / u) * 100) / 100);
+    if (qs.every(qPlaus)) { g.forEach((x, i) => { x.q = qs[i]; x.unit = u; }); if (!unitsExtrato.has("BOMBA")) unitsExtrato.set("BOMBA", new Set()); unitsExtrato.get("BOMBA").add(u); }
+  }
+  for (const x of ex.linhas) {
+    if (x.q != null || !x.total) continue;
+    const cands = [...(unitsExtrato.get(normDesc(x.desc)) || []), ...(/BOMBA/.test(x.desc) ? unitsExtrato.get("BOMBA") || [] : [])];
+    const ok = [...new Set(cands)].map((u) => [u, Math.round((x.total / u) * 100) / 100]).filter(([, q]) => qPlaus(q));
+    if (ok.length) { x.unit = ok[0][0]; x.q = ok[0][1]; }
+  }
+}
 function linhasDoExtrato(ex, arquivo) {
+  completaQtd(ex, "Engemix");
   // junta os adicionais (faltante, devolução, HE, permanência) na linha da própria remessa; bomba vira linha de serviço
   const forn = "Engemix";
   for (const x of ex.linhas) {
@@ -2665,7 +2706,7 @@ async function lerItensLote(itens) {
   renderLote();
   st.className = "status ok"; st.textContent = `${itens.length} arquivo(s)/página(s) lido(s). Confira a tabela, corrija o que precisar e clique em "Salvar lançamentos".`;
 }
-$("#btnLote").onclick = () => { loteLinhas = []; loteValorNF = null; textosLidos = []; $("#ltNF").value = ""; $("#ltData").value = ""; $("#ltStatus").textContent = ""; $("#ltNFStatus").textContent = ""; $("#ltRemessas").value = ""; $("#ltFile").value = ""; setCat("concreto"); renderLote(); openModal("mLote"); };
+$("#btnLote").onclick = () => { loteLinhas = []; loteValorNF = null; textosLidos = []; unitsExtrato = new Map(); $("#ltNF").value = ""; $("#ltData").value = ""; $("#ltStatus").textContent = ""; $("#ltNFStatus").textContent = ""; $("#ltRemessas").value = ""; $("#ltFile").value = ""; setCat("concreto"); renderLote(); openModal("mLote"); };
 $("#ltRemessas").addEventListener("change", (e) => { if (e.target.files.length) processarLote(e.target.files); e.target.value = ""; });
 const dropL = $("#dropLote");
 ["dragenter", "dragover"].forEach((ev) => dropL.addEventListener(ev, (e) => { e.preventDefault(); dropL.classList.add("over"); }));
