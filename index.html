@@ -311,6 +311,12 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
       <div class="panel-b" id="reidiBox" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px"></div>
       <p class="status" id="reidiMsg" aria-live="polite" style="padding:0 16px 12px;margin:0"></p>
     </div>
+    <div class="panel" id="btPanel">
+      <div class="panel-h"><div><h3>Mínimos: betoneira (BT) e bomba lança</h3><p class="hint" style="margin:2px 0 0">Remessa abaixo do mínimo da BT: a diferença vira <b>m³ faltante</b> (vazio = 6 m³). Bomba lança abaixo do mínimo: a diferença vira <b>adicional de volume mínimo de bomba</b> (vazio = 40 m³). Os dois são calculados automaticamente.</p></div>
+        <button class="btn small primary" type="button" id="btnSalvarBT">Salvar mínimo da BT</button></div>
+      <div class="panel-b" id="btBox" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px"></div>
+      <p class="status" id="btMsg" aria-live="polite" style="padding:0 16px 12px;margin:0"></p>
+    </div>
     <div class="panel"><div class="tbl-wrap"><table id="tblPrecos"></table></div></div>
     <p class="hint">Ao lançar uma nota sem valor, o sistema calcula quantidade × preço vigente na data do lançamento.</p>
   </section>
@@ -365,6 +371,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
         <div class="field" data-only="aco"><label for="lDoc">Documento</label>
           <select id="lDoc"><option>NF-e</option><option>CT-e</option><option>NF remessa</option><option>Recibo</option><option>Outro</option></select></div>
         <div class="field span2" data-only="concreto aco"><label for="lPeca" id="lPecaLabel">Aplicação</label><input id="lPeca" autocomplete="off" placeholder="Ex.: Sapata Ap. 07, Travessa Ap. 05, Laje"></div>
+        <div class="field span3" id="lRemBombaBox" hidden><label for="lRemBomba">Remessas atendidas pela bomba</label><input id="lRemBomba" autocomplete="off" placeholder="Ex.: 45458, 45461"><p class="hint" id="lRemBombaHint" style="margin:4px 0 0"></p></div>
         <div class="field"><label for="lNum" id="lNumLabel">Número da NF</label><input id="lNum" inputmode="numeric" autocomplete="off"></div>
         <div class="field span3"><label for="lChave" id="lChaveLabel">Chave de acesso (44 dígitos)</label><div style="display:flex;gap:8px"><input id="lChave" class="mono" inputmode="numeric" autocomplete="off" maxlength="60" style="flex:1"><button type="button" class="btn" data-copiar="lChave" data-only="frete">Copiar</button></div></div>
         <div class="field span3" data-only="frete"><label for="lChaveNFe">Chaves das NF-e (documentos originários do CT-e)</label><div style="display:flex;gap:8px"><input id="lChaveNFe" class="mono" inputmode="numeric" autocomplete="off" style="flex:1" placeholder="Preenchidas ao ler o CT-e (pode colar mais de uma, separadas por vírgula)"><button type="button" class="btn" id="btnAbrirMeuDanfe">Abrir Meu Danfe</button></div>
@@ -539,7 +546,8 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
       <div id="ltMassa" hidden style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px"><span style="font-size:13px">Preencher nas linhas marcadas:</span>
         <select id="ltObraTodas" style="max-width:220px"></select><button class="btn" type="button" id="btnLtObra">Aplicar obra</button>
         <select id="ltTipoTodas" style="max-width:260px"></select><button class="btn" type="button" id="btnLtTipo">Aplicar tipo (só concreto)</button>
-        <span class="muted" style="font-size:12px">Só preenche onde está vazio.</span></div>
+        <span class="muted" style="font-size:12px">Só preenche onde está vazio.</span>
+        <button class="btn" type="button" id="btnLtPuladas" hidden>Ler também as notas de remessa puladas</button></div>
       <div class="tbl-wrap"><table id="ltTabela"></table></div>
     </div>
     <div class="modal-f"><span class="muted" id="ltResumo" style="font-size:13px"></span><div class="right"><button class="btn" type="button" data-close>Cancelar</button><button class="btn primary" type="button" id="btnLoteSalvar" disabled>Salvar lançamentos</button></div></div>
@@ -655,7 +663,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 12h15</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 13h45</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -696,6 +704,7 @@ const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getT
 const onlyDigits = (s) => String(s || "").replace(/\D/g, "");
 
 let db = null, sample = null, sbClient = null, nfesExtrasCache = [];
+let btCfg = { padrao: 6, fornecedores: {}, bombaPadrao: 40, bomba: {} };
 let obras = [], lancs = [], orc = {}, precos = [], reidi = {}, notasNFe = [], orcVersionLoaded = false;
 let loaded = { obras: false, lancs: false };
 let resumoCat = "frete";
@@ -1088,6 +1097,8 @@ function updConcreto() {
   const p = precos.find((x) => x.id === l.precoId) || null;
   const bomba = !!(p && p.servico);
   $("#cM3Label").textContent = bomba ? "M³ bombeados *" : "Quant. realizada (m³) *";
+  $("#lRemBombaBox").hidden = !bomba;
+  if (bomba) { const sug = remessasDoDia($("#lData").value, editLanc && editLanc.id, $("#lFornec").value); $("#lRemBombaHint").textContent = sug.length ? "Concretagens nesse dia: " + sug.map((x) => x.remessa + (x.numero ? ` (NF ${x.numero}` + (x.obra ? ` · ${x.obra}` : "") + ")" : x.obra ? ` (${x.obra})` : "")).join(", ") : "Nenhuma remessa de concreto lançada nesse dia."; }
   $("#vConcLbl").textContent = bomba ? (SERV_TXT[p.servico] || "Bombeamento") : "Concreto";
   const c = calcConcreto(l);
   setUnit("uConc", c.u.concCheio != null ? c.u.concCheio : c.u.conc); setUnit("uFalt", c.u.falt); setUnit("uHe", c.u.he); setUnit("uPerm", c.u.perm); setUnit("uDev", c.u.dev);
@@ -1113,6 +1124,7 @@ function updConcreto() {
   else if ($("#uConc").dataset.manual === "1" || (l.unitManual && l.unitManual.conc != null)) info.push("Unitário do concreto digitado: considerado já com desconto.");
   else if (l.precoId) info.push("Esse tipo não tem preço vigente na data da concretagem.");
   else info.push("Escolha o tipo do concreto para puxar o preço do contrato, ou digite o unitário.");
+  if (!(p && p.servico)) { const mn = minBT($("#lFornec").value), m3v = parseNum($("#cM3").value); if (m3v > 0 && m3v < mn) info.push(`BT mínima de ${nf.format(mn)} m³: ${nf.format(mn - m3v)} m³ faltante${$("#cFaltQ").dataset.auto === "1" ? " calculado automaticamente" : ""}.`); }
   info.push("HE = 50% do unitário do concreto. Os unitários podem ser alterados.");
   $("#vInfo").textContent = info.join(" ");
 }
@@ -1125,8 +1137,21 @@ $("#lTraco").addEventListener("change", () => {
   if (p && !p.servico && p.fck != null) $("#lFckP").value = fmtIn(p.fck);
   if (p && p.servico) $("#lFckP").value = "";
   $("#uConc").dataset.manual = ""; $("#uHe").dataset.manual = "";
-  updConcreto(); updEns();
+  autoFaltante(); updConcreto(); updEns();
+  if ($("#cFaltQ").dataset.auto === "1" && $("#cFaltQ").value) ok.push(`${$("#cFaltQ").value} m³ faltante (BT mínima ${nf.format(minBT($("#lFornec").value))} m³)`);
 });
+// m³ faltante automático: remessa abaixo do mínimo da BT
+function autoFaltante() {
+  if (curCat !== "concreto") return;
+  const el = $("#cFaltQ"); if (el.dataset.auto !== "1" && el.value.trim()) return; // digitado à mão: respeita
+  const p = precos.find((x) => x.id === $("#lTraco").value);
+  const f = p && p.servico ? 0 : faltanteBT($("#lFornec").value, parseNum($("#cM3").value));
+  el.value = f ? fmtIn(f) : ""; el.dataset.auto = f ? "1" : "";
+}
+$("#cFaltQ").addEventListener("input", (e) => { e.target.dataset.auto = ""; });
+$("#lData").addEventListener("change", () => { if (curCat === "concreto") updConcreto(); });
+["cM3", "lFornec", "lTraco"].forEach((id) => $("#" + id).addEventListener("input", () => { autoFaltante(); updConcreto(); }));
+$("#lTraco").addEventListener("change", () => { autoFaltante(); updConcreto(); });
 ["cM3", "cFaltQ", "cHeQ", "cPermQ", "cDevQ"].forEach((id) => $("#" + id).addEventListener("input", updConcreto));
 function updPrecoHint() {
   const box = $("#precoHint");
@@ -1171,7 +1196,8 @@ function openLanc(l, cat) {
   $("#lFckP").value = fmtIn(v("fckProjeto"));
   const ex = (l && l.extras) || {}, um = (l && l.unitManual) || {};
   $("#cM3").value = l ? fmtIn(l.servico ? l.m3Bombeado : l.qtd) : "";
-  $("#cFaltQ").value = fmtIn(ex.m3Faltante); $("#cFaltNF").value = ex.nfFaltante || "";
+  $("#lRemBomba").value = l && l.remessasBomba ? l.remessasBomba.join(", ") : "";
+  $("#cFaltQ").value = fmtIn(ex.m3Faltante); $("#cFaltNF").value = ex.nfFaltante || ""; $("#cFaltQ").dataset.auto = l ? "" : "1";
   $("#cHeQ").value = fmtIn(ex.he); $("#cHeNF").value = ex.heNF || "";
   $("#cPermQ").value = fmtIn(ex.permanenciaH); $("#cPermNF").value = ex.permanenciaNF || "";
   $("#cDevQ").value = fmtIn(ex.devolucaoM3); $("#cDevNF").value = ex.devolucaoNF || "";
@@ -1254,6 +1280,7 @@ $("#formLanc").addEventListener("submit", async (e) => {
     peca: curCat !== "frete" ? $("#lPeca").value.trim() : "",
     ...(curCat === "concreto" ? {
       remessa: $("#lRemessa").value.trim(), traco: $("#lTracoCod").value.trim(), dataNF: $("#lDataNF").value || "",
+      remessasBomba: listaRem($("#lRemBomba").value),
       fckProjeto: $("#lFckP").value ? parseNum($("#lFckP").value) : null,
       ...(() => { const fl = formLancLike(); return { qtd: fl.qtd, m3Bombeado: fl.m3Bombeado, servico: fl.servico, extras: fl.extras, unitManual: fl.unitManual, desconto: fl.desconto, subtotal: concCalc.subtotal,
         valorUnit: concCalc.u.conc, valoresLinhas: Object.fromEntries(Object.entries(concCalc.linhas).map(([k, v]) => [k, { q: v.q, unit: v.unit, total: v.total }])), valorConcreto: concCalc.linhas.conc.total + concCalc.linhas.reidi.total }; })(),
@@ -1295,9 +1322,25 @@ $("#formLanc").addEventListener("submit", async (e) => {
   }
   btn.disabled = true;
   try {
+    // bomba sem obra: usa a obra das remessas atendidas (se for uma só)
+    if (curCat === "concreto" && data.servico && !data.obraId && (data.remessasBomba || []).length) { const os = [...new Set(data.remessasBomba.map((r) => (lancs.find((l) => l.categoria === "concreto" && !l.servico && remKey(l.remessa) === remKey(r)) || {}).obraId).filter(Boolean))]; if (os.length === 1) data.obraId = os[0]; }
     const ref = editLanc ? db.collection("lancamentos").doc(editLanc.id) : db.collection("lancamentos").doc();
     await ref.set(data);
-    closeModal("mLanc"); toast(editLanc ? "Lançamento atualizado." : "Lançamento salvo.");
+    // bomba lança abaixo do mínimo: lança também o adicional de volume mínimo
+    let extraMsg = "";
+    if (!editLanc && curCat === "concreto" && data.servico === "bomba-lanca") {
+      const mn = minBomba(data.fornecedor), q = Number(data.m3Bombeado) || 0;
+      const jaTem = lancs.some((l) => l.servico === "minimo" && data.remessa && remKey(l.remessa) === remKey(data.remessa));
+      if (q > 0 && q < mn && !jaTem) {
+        const pm = tiposConcreto(data.fornecedor).find((x) => x.servico === "minimo" && (x.unidade || "m3") !== "vb") || null;
+        const um = data.unitManual && data.unitManual.conc != null ? { conc: data.unitManual.conc } : {};
+        const base = { ...data, precoId: pm ? pm.id : data.precoId, servico: "minimo", m3Bombeado: Math.round((mn - q) * 100) / 100, qtd: 0, extras: {}, unitManual: pm ? {} : um, desconto: {}, peca: `Adicional volume mínimo de bomba (${nf.format(mn)} m³)`, descricao: "", criadoEm: Date.now() + 1 };
+        const c = calcConcreto(base);
+        await db.collection("lancamentos").doc().set({ ...base, valor: c.total, valorUnit: c.u.conc, subtotal: c.subtotal, reidiPct: c.pct, valoresLinhas: Object.fromEntries(Object.entries(c.linhas).map(([k, v]) => [k, { q: v.q, unit: v.unit, total: v.total }])), valorConcreto: c.linhas.conc.total + c.linhas.reidi.total });
+        extraMsg = ` + adicional de volume mínimo de ${nf.format(mn - q)} m³ (bomba lança mínima ${nf.format(mn)} m³)`;
+      }
+    }
+    closeModal("mLanc"); toast((editLanc ? "Lançamento atualizado." : "Lançamento salvo.") + extraMsg);
   } catch (err) { msg.className = "status err"; msg.textContent = dbErr(err); }
   finally { btn.disabled = false; }
 });
@@ -1469,7 +1512,7 @@ function applyExtract(x, origem) {
     if (fm && !$("#lFckP").value) $("#lFckP").value = fm[1];
     if (x.quantidade) $("#cM3").value = fmtIn(Math.round(parseNum(x.quantidade) * 1000) / 1000);
     if (x.numero) $("#lNum").value = String(x.numero).replace(/^0+(?=\d)/, "");
-    fillTraco(); updConcreto(); updEns();
+    fillTraco(); autoFaltante(); updConcreto(); updEns();
   }
   const bm = txtD.match(/(\d{1,2}[.,]\d)\s*MM/i);
   if (cat === "aco") { if (bm) $("#lBitola").value = bm[1].replace(".", ","); if (/CA[- ]?60/i.test(txtD)) $("#lTipoAco").value = "CA-60"; else if (/CA[- ]?50/i.test(txtD)) $("#lTipoAco").value = "CA-50"; else if (/TELA/i.test(txtD)) $("#lTipoAco").value = "Tela soldada"; }
@@ -1547,6 +1590,7 @@ function applyConcreto(f, origem) {
   if (f.fck) $("#lFckP").value = fmtIn(f.fck);
   if (f.traco) $("#lTracoCod").value = f.traco;
   if (f.m3) { $("#cM3").value = fmtIn(f.m3); ok.push(nf.format(f.m3) + " m³"); } else falta.push("volume (m³)");
+  if (!$("#cFaltQ").value.trim()) $("#cFaltQ").dataset.auto = "1";
   if (f.pedido && !/PEDIDO|O\.C\./i.test($("#lObs").value)) $("#lObs").value = ($("#lObs").value ? $("#lObs").value + " | " : "") + "Ordem de compra " + f.pedido;
   if (f.lacre && !/LACRE/i.test($("#lObs").value)) $("#lObs").value = ($("#lObs").value ? $("#lObs").value + " | " : "") + "Lacre " + f.lacre;
   fillTraco();
@@ -2196,7 +2240,7 @@ async function textoDoArquivo(file, precisaImagem) {
 function tipoPagina(t) {
   const U = String(t || "").toUpperCase();
   if (/EXTRATO\s+DE\s+FORNECIMENTO/.test(U)) return "extrato";
-  if ((U.match(/\d{9,10}\b[^\n]*?\d{2}[.\/]\d{2}[.\/]\d{4}[^\n]*\b(?:M3|M³|HR?|UN|VB)\b/g) || []).length >= 3) return "extrato";
+  if ((U.match(/\d{9,10}\b[^\n]*?\d{2}[.\/]\d{2}[.\/]\d{4}[^\n]*(?:[A-Z]?M[3³S]|\bHR?|\bUN|\bVB)\b[^\n]*\d[.,]\d{2}/g) || []).length >= 3) return "extrato";
   const danfe = /DOCUMENTO AUXILIAR DA\s+NOTA FISCAL ELETR|DANFE\b|CHAVE DE ACESSO\s*(?!DA NFS)/.test(U) && !/NFS-?E/.test(U.slice(0, 600));
   if (!danfe && /DANFSE|NFS-?E|DOCUMENTO AUXILIAR DA NFS|NOTA FISCAL DE SERVI/.test(U)) return "faturamento";
   if (!danfe && /RECIBO DO SACADO|FICHA DE COMPENSA|LOCAL DE PAGAMENTO|NOSSO N[ÚU]MERO|AUTENTICA[ÇC][ÃA]O MEC/.test(U)) return "boleto";
@@ -2216,8 +2260,21 @@ function parseExtrato(texto) {
   for (const raw of U.split("\n")) {
     const m = raw.match(/(\d{9,10})\b.*?(\d{2})[.\/](\d{2})[.\/](\d{4})\s*[|\[(]?\s*(.+)$/); if (!m) continue;
     let resto = m[5], q = null, un = null, tot = null, um = "";
-    const n = resto.match(/^(.*?)\s+([\d][\d.,]*)\s*[|\]]?\s*(M3|M³|MS|M2|H|HR|HS|UN|VB|KG)\b\s*[|\]]?\s*([\d][\d.,]*)\s+([^\s]*\d[^\s]*)/);
-    if (n) { resto = n[1]; um = n[3]; q = numExtrato(n[2]); un = numExtrato(n[4]); tot = numExtrato(n[5]); }
+    // números do fim da linha: quantidade, unitário e total (ignora "|", "M3", "NM3"…)
+    const tk = resto.trim().split(/\s+/), nums = [];
+    let k = tk.length - 1;
+    for (; k >= 0 && nums.length < 3; k--) {
+      const t = tk[k].replace(/[|\]\[)(]+$/g, "").replace(/^[|\]\[(]+/g, "");
+      if (/^\d[\d.,]*$/.test(t)) { nums.unshift(t); continue; }
+      if (/^[A-Z]{1,2}\d{2,}[\d.,]*$/.test(t) && nums.length === 0) { nums.unshift("?"); continue; } // total ilegível (ex.: "e1719")
+      if (!t || /^[^A-Z0-9]*$/.test(t) || /^[A-Z]{0,2}M[3³S]$/.test(t) || /^(H|HR|HS|UN|VB|KG|M2)$/.test(t)) { if (/M[3³S]$|^(H|HR|HS|UN|VB|KG|M2)$/.test(t)) um = t; continue; }
+      break;
+    }
+    if (nums.length >= 2) {
+      resto = tk.slice(0, k + 1).join(" ");
+      if (nums.length === 3) { q = numExtrato(nums[0]); un = numExtrato(nums[1]); tot = numExtrato(nums[2]); }
+      else { un = numExtrato(nums[0]); tot = numExtrato(nums[1]); q = un ? Math.round((tot / un) * 100) / 100 : null; }
+    }
     if (q != null && un) {
       const calc = Math.round(q * un * 100) / 100;
       if (tot == null || Math.abs(calc - tot) > Math.max(0.05, tot * 0.01)) { const q2 = tot ? Math.round((tot / un) * 100) / 100 : null; if (q2 && Math.abs(q2 * 4 - Math.round(q2 * 4)) < 0.02 && q2 < 60 && (q == null || q > 60)) q = q2; tot = Math.round(q * un * 100) / 100; }
@@ -2255,10 +2312,12 @@ function lerFaturamento(text) {
   if (n) out.numero = String(Number(n[1].replace(/\D/g, "")));
   const d = U.match(/(?:DATA\s+(?:E\s+HORA\s+)?D[AE]\s+EMISS[ÃA]O|EMITIDA\s+EM|EMISS[ÃA]O)[\s\S]{0,80}?(\d{2})\/(\d{2})\/(\d{4})/) || U.match(/(\d{2})\/(\d{2})\/(\d{4})/);
   if (d && dataOk(d[1], d[2], d[3])) out.data = `${d[3]}-${d[2]}-${d[1]}`;
+  const vt = U.match(/VALOR TOTAL DA NFS-?E[^\n]*\n[^\n]*?R\$\s*([\d.]+,\d{2})/) || U.match(/VALOR (?:TOTAL DA NOTA|DOS SERVI[ÇC]OS|DO SERVI[ÇC]O|BRUTO)[^\d]{0,40}([\d.]+,\d{2})/) || U.match(/BC ISSQN[^\n]*\n\s*R\$\s*([\d.]+,\d{2})/);
+  if (vt) out.valor = parseNum(vt[1]);
   out.remessas = [...new Set((U.match(/REMESSA[S]?[^\n]{0,400}/g) || []).join(" ").match(/\b\d{4,6}\b/g) || [])];
   return out;
 }
-let loteLinhas = [];
+let loteLinhas = [], loteValorNF = null;
 const tiposOpc = (forn, sel) => `<option value="">— escolha —</option>` + tiposConcreto(forn).map((p) => { const nome = p.servico ? (SERV_TXT[p.servico] || "Serviço") : "FCK " + nf.format(p.fck) + (p.descricao ? " · " + p.descricao.replace(/^Item [\d.]+ · /, "") : ""); return `<option value="${esc(p.id)}" ${p.id === sel ? "selected" : ""}>${esc(nome)}${forn ? "" : " (" + esc(p.fornecedor) + ")"}</option>`; }).join("");
 const obrasOpc = (sel) => `<option value="">A definir</option>` + obras.filter((o) => o.ativa !== false).sort((a, b) => a.nome.localeCompare(b.nome)).map((o) => `<option value="${esc(o.id)}" ${o.id === sel ? "selected" : ""}>${esc(o.nome)}</option>`).join("");
 function renderLote() {
@@ -2280,17 +2339,19 @@ function renderLote() {
         <td><input data-k="fornecedor" value="${esc(L.fornecedor || "")}" list="fornLancList" style="width:130px"></td>
         <td><select data-k="obraId" style="width:130px">${obrasOpc(L.obraId)}</select></td>
         <td><select data-k="precoId" style="width:200px">${tiposOpc(L.fornecedor, L.precoId)}</select>${L.descExtrato ? `<div class="muted" style="font-size:11px;max-width:200px;white-space:normal">Extrato: ${esc(L.descExtrato)}${L.um && L.um.conc != null ? " · " + money(L.um.conc) + (L.servicoTipo ? "" : "/m³") : ""}</div>` : ""}</td>
-        <td class="n"><input data-k="m3" value="${L.m3 ? fmtIn(L.m3) : ""}" inputmode="decimal" style="width:60px;text-align:right"></td>
-        <td><input data-k="peca" value="${esc(L.peca || "")}" style="width:180px"></td>
+        <td class="n"><input data-k="m3" value="${L.m3 ? fmtIn(L.m3) : ""}" inputmode="decimal" style="width:60px;text-align:right">${L.avisoBT ? `<div style="font-size:11px;max-width:170px;white-space:normal;text-align:left;color:${/^Extrato cobrou|não cobrou/.test(L.avisoBT) ? "var(--bad)" : "var(--muted)"}">${esc(L.avisoBT)}</div>` : ""}</td>
+        <td><input data-k="peca" value="${esc(L.peca || "")}" style="width:180px">${L.servicoTipo ? `<input data-k="remessasBomba" value="${esc((L.remessasBomba || []).join(", "))}" placeholder="Remessas atendidas" title="Remessas de concreto atendidas por esta bomba" style="width:180px;margin-top:4px"><div class="muted" style="font-size:11px;max-width:180px;white-space:normal">${(L.sugBomba || []).length ? "Mesmo dia: " + esc(L.sugBomba.map((x) => x.remessa + (x.numero ? " (NF " + x.numero + ")" : "")).join(", ")) : "Nenhuma concretagem lançada nesse dia."}</div>` : ""}</td>
         <td class="n">${c.total ? money(c.total) : "—"}</td>
         <td>${sit}</td></tr>`;
     }).join("") + `</tbody>`;
   $$("#ltTabela [data-k]").forEach((el) => {
     el.onchange = () => {
       const L = loteLinhas[Number(el.closest("tr").dataset.i)], k = el.dataset.k;
-      L[k] = k === "incluir" ? el.checked : k === "m3" ? parseNum(el.value) : el.value;
+      L[k] = k === "incluir" ? el.checked : k === "m3" ? parseNum(el.value) : k === "remessasBomba" ? listaRem(el.value) : el.value;
+      if (k === "remessasBomba") { loteLinhas.forEach((x) => { if (x !== L && x.servicoTipo && remKey(x.remessa) === remKey(L.remessa)) x.remessasBomba = L.remessasBomba.slice(); }); const os = [...new Set(L.remessasBomba.map((r) => ((L.sugBomba || []).find((x) => x.remessa === r) || {}).obraId).filter(Boolean))]; if (os.length === 1) loteLinhas.forEach((x) => { if (x.servicoTipo && remKey(x.remessa) === remKey(L.remessa) && !x.obraId) x.obraId = os[0]; }); }
       if (k === "remessa") L.existente = lancs.find((l) => l.categoria === "concreto" && !l.servico && remKey(l.remessa) === remKey(L.remessa)) || null;
       if (k === "fornecedor") L.precoId = null;
+      if (k === "m3" || k === "fornecedor" || k === "precoId" || k === "obraId" || k === "data") aplicaBTLote();
       renderLote();
     };
     el.style.background = "var(--surface)"; el.style.border = "1px solid var(--line)"; el.style.borderRadius = "6px"; el.style.padding = "5px 6px";
@@ -2300,6 +2361,10 @@ function renderLote() {
   $("#ltResumo").textContent = `${ok.length} nota(s) selecionada(s): ${ok.filter((L) => !L.existente).length} nova(s), ${ok.filter((L) => L.existente).length} já lançada(s) · valor das novas ${money(tot)}`;
   const ext = loteLinhas.filter((L) => L.descExtrato && !L.aviso && !L.erro);
   if (ext.length) $("#ltResumo").textContent += ` · soma do extrato lido: ${money(ext.reduce((a, L) => a + calcConcreto(linhaParaLanc(L)).total, 0))}`;
+  if (loteValorNF) {
+    const soma = loteLinhas.filter((L) => !L.aviso && !L.erro && !L.lendo && L.incluir).reduce((a, L) => a + calcConcreto(linhaParaLanc(L)).total, 0), dif = Math.round((loteValorNF - soma) * 100) / 100;
+    $("#ltResumo").innerHTML = esc($("#ltResumo").textContent) + ` · valor da NF ${money(loteValorNF)} · ` + (Math.abs(dif) < 0.05 ? `<b style="color:var(--ok)">bateu ✓</b>` : `<b style="color:var(--bad)">diferença ${money(dif)}</b> (falta remessa, m³ ou preço em alguma linha)`);
+  }
   $("#btnLoteSalvar").disabled = !ok.length || loteLinhas.some((L) => L.lendo);
   if (!loteLinhas.some((L) => L.lendo)) atualizaMassaLote();
 }
@@ -2308,10 +2373,59 @@ function atualizaMassaLote() {
   const box = $("#ltMassa"); box.hidden = !tem; box.style.display = tem ? "flex" : "none"; if (!tem) return;
   const forn = (loteLinhas.find((L) => L.fornecedor && !L.aviso) || {}).fornecedor || "";
   $("#ltObraTodas").innerHTML = obrasOpc("").replace("A definir", "Obra…");
+  const np = loteLinhas.filter((L) => L.pulada).length; $("#btnLtPuladas").hidden = !np; $("#btnLtPuladas").textContent = `Ler também as ${np} notas de remessa puladas (procura remessa faltando, mais lento)`;
   $("#ltTipoTodas").innerHTML = tiposOpc(forn, "").replace("— escolha —", "Tipo do concreto…").replace(/<option value="[^"]*">(?:Bombeamento|Adicional|M³|Outro)[^<]*<\/option>/g, "");
 }
-$("#btnLtObra").onclick = () => { const v = $("#ltObraTodas").value; if (!v) return; loteLinhas.forEach((L) => { if (!L.aviso && !L.erro && L.incluir && !L.obraId) L.obraId = v; }); renderLote(); };
+$("#btnLtPuladas").onclick = () => {
+  const its = loteLinhas.filter((L) => L.pulada);
+  its.forEach((L) => { delete L.aviso; delete L.pulada; L.lendo = true; L.forcar = true; });
+  renderLote(); lerItensLote(its);
+};
+$("#btnLtObra").onclick = () => { const v = $("#ltObraTodas").value; if (!v) return; loteLinhas.forEach((L) => { if (!L.aviso && !L.erro && L.incluir && !L.obraId) L.obraId = v; }); aplicaBTLote(); renderLote(); };
 $("#btnLtTipo").onclick = () => { const v = $("#ltTipoTodas").value; if (!v) return; loteLinhas.forEach((L) => { if (!L.aviso && !L.erro && L.incluir && !L.servicoTipo && !L.precoId) L.precoId = v; }); renderLote(); };
+// Regra da BT no lote: remessa abaixo do mínimo ganha m³ faltante; se veio do extrato, confere o que foi cobrado
+function aplicaBombaLote() {
+  // conferência do mínimo da bomba lança (lança + adicional mínimo, por bomba)
+  const grupos = new Map();
+  for (const L of loteLinhas) if (!L.aviso && !L.erro && !L.lendo && (L.servicoTipo === "bomba-lanca" || L.servicoTipo === "minimo")) { const k = remKey(L.remessa); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(L); }
+  for (const g of grupos.values()) {
+    const lan = g.find((x) => x.servicoTipo === "bomba-lanca"), mi = g.find((x) => x.servicoTipo === "minimo");
+    g.forEach((x) => (x.avisoBT = ""));
+    if (!lan) continue;
+    const mn = minBomba(lan.fornecedor), ql = Number(lan.m3) || 0, qm = mi ? Number(mi.m3) || 0 : 0;
+    if (ql && ql < mn && Math.abs(ql + qm - mn) > 0.004) (mi || lan).avisoBT = mi ? `Bomba: ${nf.format(ql)} + ${nf.format(qm)} m³ = ${nf.format(ql + qm)}; o mínimo é ${nf.format(mn)} m³.` : `Bomba lançou ${nf.format(ql)} m³ e o mínimo é ${nf.format(mn)} m³: falta o adicional de ${nf.format(mn - ql)} m³.`;
+  }
+  // remessas atendidas: sugere pelas concretagens do mesmo dia (do lote e já lançadas); com uma bomba só no dia, já vincula
+  const porDia = new Map();
+  for (const L of loteLinhas) if (!L.aviso && !L.erro && L.servicoTipo === "bomba-lanca" && L.data) { if (!porDia.has(L.data)) porDia.set(L.data, []); porDia.get(L.data).push(L); }
+  for (const L of loteLinhas) {
+    if (L.aviso || L.erro || !L.servicoTipo || !L.data) continue;
+    const doLote = loteLinhas.filter((x) => !x.aviso && !x.erro && !x.servicoTipo && x.data === L.data && x.remessa && fornIgual(x.fornecedor || "", L.fornecedor || "")).map((x) => ({ remessa: String(Number(x.remessa)), numero: $("#ltNF").value, obraId: x.obraId || "", obra: x.obraId ? obraNome(x.obraId) : "" }));
+    const sug = [...doLote, ...remessasDoDia(L.data, null, L.fornecedor).filter((r) => !doLote.some((d) => d.remessa === String(Number(r.remessa))))];
+    L.sugBomba = sug;
+    const irmao = loteLinhas.find((x) => x !== L && x.servicoTipo && remKey(x.remessa) === remKey(L.remessa) && (x.remessasBomba || []).length);
+    if (!(L.remessasBomba || []).length && irmao) L.remessasBomba = irmao.remessasBomba.slice();
+    if (!(L.remessasBomba || []).length && (porDia.get(L.data) || []).length === 1 && sug.length) L.remessasBomba = sug.map((x) => x.remessa);
+    if (!L.obraId && (L.remessasBomba || []).length) { const os = [...new Set(L.remessasBomba.map((r) => (sug.find((x) => x.remessa === r) || {}).obraId).filter(Boolean))]; if (os.length === 1) L.obraId = os[0]; }
+  }
+}
+function aplicaBTLote() {
+  aplicaBombaLote();
+  for (const L of loteLinhas) {
+    if (L.aviso || L.erro || L.lendo || L.servicoTipo) continue;
+    const p = precos.find((x) => x.id === L.precoId); if (p && p.servico) continue;
+    if (!Number(L.m3)) { L.avisoBT = ""; continue; }
+    const regra = faltanteBT(L.fornecedor, L.m3), mn = minBT(L.fornecedor);
+    L.extras = L.extras || {};
+    const cobrado = Number(L.extras.m3Faltante) || 0;
+    if (L.descExtrato && /FALTANTE/.test(L.descExtrato)) {
+      L.avisoBT = Math.abs(cobrado - regra) > 0.004 ? `Extrato cobrou ${nf.format(cobrado)} m³ faltante; pela BT mínima de ${nf.format(mn)} m³ seriam ${nf.format(regra)} m³.` : "";
+    } else if (L.btAuto || !cobrado) {
+      L.extras.m3Faltante = regra || null; L.btAuto = !!regra;
+      L.avisoBT = regra ? (L.descExtrato ? `O extrato não cobrou m³ faltante; pela BT mínima de ${nf.format(mn)} m³ seriam ${nf.format(regra)} m³ (incluído).` : `+ ${nf.format(regra)} m³ faltante (BT mínima ${nf.format(mn)} m³).`) : "";
+    }
+  }
+}
 function linhaParaLanc(L) {
   const p = precos.find((x) => x.id === L.precoId);
   const serv = (p && p.servico) || L.servicoTipo || "";
@@ -2351,6 +2465,7 @@ async function processarLote(files) {
   const st = $("#ltStatus");
   // PDF com várias páginas (NFS-e + boletos + extrato + remessas): cada página é lida separadamente
   const itens = [];
+  for (const f of files) { const vn = f.name.toUpperCase().match(/VALOR\s*R\$?\s*([\d.]+[.,]\d{2})/); if (vn && !loteValorNF) loteValorNF = numExtrato(vn[1]); }
   for (const f of files) {
     let n = 1;
     if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") { try { n = (await pdfDoc(f)).numPages; } catch { n = 1; } }
@@ -2358,14 +2473,18 @@ async function processarLote(files) {
     else itens.push({ arquivo: f.name, nome: f.name, file: f, lendo: true, incluir: true });
   }
   loteLinhas = loteLinhas.concat(itens); renderLote();
+  await lerItensLote(itens);
+}
+async function lerItensLote(itens) {
+  const st = $("#ltStatus");
   let usouOcr = false;
   const folhas = new Map(); // arquivo → { de, lidas:Set }
   try {
     for (let i = 0; i < itens.length; i++) {
       const L = itens[i];
       const fx = folhas.get(L.nome);
-      if (L.pagina && fx && fx.de && fx.lidas.size >= fx.de && !L.forcar) {
-        Object.assign(L, { lendo: false, aviso: "Nota de remessa: não precisou ler, o extrato de fornecimento já trouxe todas as remessas desta NF." }); renderLote(); continue;
+      if (L.pagina && fx && fx.de && fx.lidas.size >= fx.de && !L.forcar && !folhas.forcarTodas) {
+        Object.assign(L, { lendo: false, pulada: true, aviso: "Nota de remessa: não precisou ler, o extrato de fornecimento já trouxe todas as remessas desta NF." }); renderLote(); continue;
       }
       st.className = "status"; st.textContent = `Lendo ${i + 1} de ${itens.length}: ${L.arquivo}… (página escaneada pode levar alguns segundos)`;
       try {
@@ -2380,6 +2499,7 @@ async function processarLote(files) {
           const info = lerFaturamento(f.texto);
           if (info.numero && !$("#ltNF").value) $("#ltNF").value = info.numero;
           if (info.data && !$("#ltData").value) $("#ltData").value = info.data;
+          if (info.valor) loteValorNF = info.valor;
           Object.assign(L, { lendo: false, aviso: `Nota de faturamento${info.numero ? " NF " + info.numero : ""}${info.data ? " · " + fmtDate(info.data) : ""} (preenchida no item 1).` });
         } else if (f.tipoPagina === "boleto") {
           Object.assign(L, { lendo: false, aviso: "Boleto (ignorado)." });
@@ -2405,13 +2525,14 @@ async function processarLote(files) {
   // linha do extrato sem preço (ex.: quebrou na leitura): usa o unitário de outra remessa com o mesmo concreto
   const normD = (d) => String(d || "").split(" + ")[0].toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/O(?=\d)/g, "0");
   for (const L of loteLinhas) if (L.descExtrato && !L.servicoTipo && L.um && L.um.conc == null) { const o = loteLinhas.find((x) => x !== L && x.um && x.um.conc != null && !x.servicoTipo && normD(x.descExtrato) === normD(L.descExtrato)); if (o) { L.um.conc = o.um.conc; L.precoId = L.precoId || o.precoId; } }
+  aplicaBTLote();
   // remessas repetidas no lote
   const vistos = new Map();
   for (const L of loteLinhas) { if (L.aviso || L.erro || L.lendo || !L.remessa) continue; const k = chaveLote(L); if (vistos.has(k)) { L.erro = `Remessa ${L.remessa} repetida neste lote`; } else vistos.set(k, L); }
   renderLote();
   st.className = "status ok"; st.textContent = `${itens.length} arquivo(s)/página(s) lido(s). Confira a tabela, corrija o que precisar e clique em "Salvar lançamentos".`;
 }
-$("#btnLote").onclick = () => { loteLinhas = []; $("#ltNF").value = ""; $("#ltData").value = ""; $("#ltStatus").textContent = ""; $("#ltNFStatus").textContent = ""; $("#ltRemessas").value = ""; $("#ltFile").value = ""; setCat("concreto"); renderLote(); openModal("mLote"); };
+$("#btnLote").onclick = () => { loteLinhas = []; loteValorNF = null; $("#ltNF").value = ""; $("#ltData").value = ""; $("#ltStatus").textContent = ""; $("#ltNFStatus").textContent = ""; $("#ltRemessas").value = ""; $("#ltFile").value = ""; setCat("concreto"); renderLote(); openModal("mLote"); };
 $("#ltRemessas").addEventListener("change", (e) => { if (e.target.files.length) processarLote(e.target.files); e.target.value = ""; });
 const dropL = $("#dropLote");
 ["dragenter", "dragover"].forEach((ev) => dropL.addEventListener(ev, (e) => { e.preventDefault(); dropL.classList.add("over"); }));
@@ -2454,7 +2575,7 @@ $("#btnLoteSalvar").onclick = async () => {
           const p = precos.find((x) => x.id === L.precoId);
           await db.collection("lancamentos").doc().set({
             ...base, obraId: L.obraId || "", doc: "NF-e", numero: nfNum, dataNF: nfData, remessa: L.remessa, chave: L.chave || "", peca: L.peca || "", traco: L.traco || "",
-            servico: base.servico || "", unidade: "m³", descricao: L.descExtrato || "", obs: [L.lacre ? "Lacre " + L.lacre : "", L.descExtrato ? "Extrato de fornecimento" : ""].filter(Boolean).join(" | "),
+            servico: base.servico || "", remessasBomba: L.remessasBomba || [], unidade: "m³", descricao: L.descExtrato || "", obs: [L.lacre ? "Lacre " + L.lacre : "", L.descExtrato ? "Extrato de fornecimento" : ""].filter(Boolean).join(" | "),
             ensaios: { d7: { cp1: null, cp2: null, data: "" }, d14: { cp1: null, cp2: null, data: "" }, d28: { cp1: null, cp2: null, data: "" } },
             valor: c.total, valorCalculado: true, valorUnit: c.u.conc, valorConcreto: c.linhas.conc.total + c.linhas.reidi.total, subtotal: c.subtotal, reidiPct: c.pct,
             valoresLinhas: Object.fromEntries(Object.entries(c.linhas).map(([k, v]) => [k, { q: v.q, unit: v.unit, total: v.total }])),
@@ -2720,6 +2841,37 @@ function itemTxt(p) {
   if (p.categoria === "aco") return [p.tipoAco || "Todos os tipos", n2(p.bitola) != null ? "Ø " + String(p.bitola).replace(".", ",") + " mm" : "todas as bitolas", p.descricao].filter(Boolean).join(" · ");
   return p.descricao || "Frete";
 }
+function minBT(forn) {
+  for (const [k, v] of Object.entries(btCfg.fornecedores || {})) if (fornIgual(k, forn || "")) return Number(v) || 0;
+  return Number(btCfg.padrao) || 6;
+}
+function remessasDoDia(data, ignorarId, forn) {
+  if (!data) return [];
+  const vistos = new Set();
+  return lancs.filter((l) => l.categoria === "concreto" && !l.servico && l.data === data && l.id !== ignorarId && (!forn || fornIgual(l.fornecedor || "", forn)) && !vistos.has(remKey(l.remessa)) && vistos.add(remKey(l.remessa))).map((l) => ({ remessa: l.remessa, numero: l.numero, obra: l.obraId ? obraNome(l.obraId) : "", obraId: l.obraId || "" })).sort((a, b) => String(a.remessa).localeCompare(String(b.remessa), undefined, { numeric: true }));
+}
+const listaRem = (t) => [...new Set(String(t || "").split(/[,;\s]+/).map((x) => x.replace(/\D/g, "")).filter(Boolean).map((x) => String(Number(x))))];
+function minBomba(forn) {
+  for (const [k, v] of Object.entries(btCfg.bomba || {})) if (fornIgual(k, forn || "")) return Number(v) || 0;
+  return Number(btCfg.bombaPadrao) || 40;
+}
+const faltanteBT = (forn, m3) => { const mn = minBT(forn), v = Number(m3) || 0; return v > 0 && v < mn ? Math.round((mn - v) * 100) / 100 : 0; };
+function renderBT() {
+  const box = $("#btBox"); if (!box) return;
+  if (document.activeElement && box.contains(document.activeElement)) return;
+  const forns = [];
+  for (const f of precos.filter((p) => p.categoria === "concreto").map((p) => p.fornecedor).concat(Object.keys(btCfg.fornecedores || {}))) if (f && !forns.some((x) => fornIgual(x, f))) forns.push(f);
+  forns.sort((a, b) => a.localeCompare(b));
+  box.innerHTML = forns.length ? forns.map((f, i) => { const v = Object.entries(btCfg.fornecedores || {}).find(([k]) => fornIgual(k, f)), b = Object.entries(btCfg.bomba || {}).find(([k]) => fornIgual(k, f)); return `<div class="field"><label for="bt${i}">${esc(f)} · BT mínima (m³)</label><input id="bt${i}" data-forn="${esc(f)}" data-t="bt" inputmode="decimal" autocomplete="off" value="${v ? fmtIn(v[1]) : ""}" placeholder="6"></div><div class="field"><label for="bb${i}">${esc(f)} · bomba lança mínima (m³)</label><input id="bb${i}" data-forn="${esc(f)}" data-t="bomba" inputmode="decimal" autocomplete="off" value="${b ? fmtIn(b[1]) : ""}" placeholder="40"></div>`; }).join("")
+    : `<p class="hint" style="margin:0">Cadastre um preço de concreto para aparecer a concreteira aqui.</p>`;
+}
+$("#btnSalvarBT").onclick = async () => {
+  const msg = $("#btMsg");
+  if (!db) { msg.className = "status err"; msg.textContent = "Banco de dados indisponível."; return; }
+  const novo = {}, nb = {}; $$("#btBox input").forEach((i) => { const v = parseNum(i.value); if (v) (i.dataset.t === "bomba" ? nb : novo)[i.dataset.forn] = v; });
+  try { await db.doc("config/bt").set({ padrao: 6, fornecedores: novo, bombaPadrao: 40, bomba: nb, atualizadoEm: Date.now() }); btCfg = { padrao: 6, fornecedores: novo, bombaPadrao: 40, bomba: nb }; msg.className = "status ok"; msg.textContent = "Mínimo da BT salvo. Vale para os próximos lançamentos."; }
+  catch (err) { msg.className = "status err"; msg.textContent = dbErr(err); }
+};
 function renderReidi() {
   const box = $("#reidiBox"); if (!box) return;
   if (document.activeElement && box.contains(document.activeElement)) return;
@@ -2748,7 +2900,7 @@ $("#btnSalvarReidi").onclick = async () => {
   } catch (err) { msg.className = "status err"; msg.textContent = dbErr(err); }
 };
 function renderPrecos() {
-  renderReidi();
+  renderReidi(); renderBT(); $("#btPanel").hidden = precoCat !== "concreto";
   $$("#segPreco button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.cat === precoCat)));
   const t = $("#tblPrecos");
   const ps = precos.filter((p) => p.categoria === precoCat).sort((a, b) => (a.fornecedor || "").localeCompare(b.fornecedor || "") || (Number(a.fck) || 0) - (Number(b.fck) || 0) || (Number(a.bitola) || 0) - (Number(b.bitola) || 0));
@@ -2972,12 +3124,12 @@ function capaNF() {
     const txtEns = (c) => `${c.ok} atingiram${c.abaixo ? ` · <span class="bad">${c.abaixo} abaixo</span>` : ""}${c.nl ? ` · <span class="bad">${c.nl} não localizado(s)</span>` : ""}`;
     const conc = (xs) => xs.filter((l) => !l.servico), serv = (xs) => xs.filter((l) => l.servico);
     const resumo = obrasG.map((o) => `<tr><td>${esc(o.nome)}</td><td class="n">${nRem(o.ls)}</td><td class="n">${m3(vol(o.ls))}</td><td class="n">${money(val(conc(o.ls)))}</td><td class="n">${serv(o.ls).length ? money(val(serv(o.ls))) : "—"}</td><td class="n"><b>${money(val(o.ls))}</b></td><td class="n">${totV ? nf.format((val(o.ls) / totV) * 100) + "%" : "—"}</td><td class="ensr">${nRem(o.ls) ? txtEns(contaEns(o.ls)) : "—"}</td></tr>`).join("");
-    const servResumo = (xs) => { const m = new Map(); for (const l of xs) { const k = (l.peca || l.descricao || "Serviço de bomba").trim(); const g = m.get(k) || { k, n: 0, m3: 0, v: 0, rem: [] }; g.n++; g.m3 += Number(l.m3Bombeado) || 0; g.v += Number(l.valor) || 0; if (l.remessa) g.rem.push(l.remessa); m.set(k, g); } return [...m.values()]; };
+    const servResumo = (xs) => { const m = new Map(); for (const l of xs) { const k = (l.peca || l.descricao || "Serviço de bomba").trim(); const g = m.get(k) || { k, n: 0, m3: 0, v: 0, rem: [], at: [] }; g.n++; g.m3 += Number(l.m3Bombeado) || 0; g.v += Number(l.valor) || 0; if (l.remessa) g.rem.push(l.remessa); (l.remessasBomba || []).forEach((r) => { const c = lancs.find((x) => x.categoria === "concreto" && !x.servico && remKey(x.remessa) === remKey(r)); g.at.push(r + (c && c.numero && String(c.numero) !== String(nfq) ? ` (NF ${c.numero})` : "")); }); m.set(k, g); } return [...m.values()]; };
     const detalhe = obrasG.map((o) => { const cs = conc(o.ls), ss = servResumo(serv(o.ls));
       return `<h3>${esc(o.nome)} <span>${nRem(o.ls)} remessa(s) · ${m3(vol(o.ls))} · ${money(val(o.ls))}</span></h3>
       <table><thead><tr><th>Remessa</th><th>Data</th><th>Aplicação / peça</th><th class="n">FCK</th><th>Traço</th><th class="n">Volume</th><th class="n">R$/m³</th><th class="n">Valor</th><th class="n">7 dias (MPa)</th><th class="n">28 dias (MPa)</th><th>Resultado</th><th>Obs.</th></tr></thead><tbody>
       ${cs.map((l) => `<tr><td>${esc(l.remessa || "—")}</td><td>${dt(l.data)}</td><td>${esc(l.peca || l.descricao || "")}</td><td class="n">${n2(l.fckProjeto) != null ? nf.format(l.fckProjeto) : "—"}</td><td>${esc(l.traco || "")}</td><td class="n">${m3(l.qtd)}</td><td class="n">${Number(l.qtd) ? money(Number(l.valor) / Number(l.qtd)) : "—"}</td><td class="n">${money(l.valor)}</td><td class="n">${ens(l, "d7")}</td><td class="n">${ens(l, "d28")}</td><td>${SIT[sit(l)]}</td><td class="obs">${esc(l.obs || "")}</td></tr>`).join("")}
-      ${ss.map((g) => `<tr class="srv"><td colspan="5"><b>Bomba:</b> ${esc(g.k)} · ${g.n} lançamento(s)${g.rem.length ? ` <span class="rem">(remessas ${esc([...new Set(g.rem)].join(", "))})</span>` : ""}</td><td class="n">${g.m3 ? nf.format(g.m3) + " m³ bomb." : "—"}</td><td></td><td class="n">${money(g.v)}</td><td colspan="4"></td></tr>`).join("")}
+      ${ss.map((g) => `<tr class="srv"><td colspan="5"><b>Bomba:</b> ${esc(g.k)} · ${g.n} lançamento(s)${g.at.length ? ` · <b>atendeu as remessas ${esc([...new Set(g.at)].join(", "))}</b>` : ""}${g.rem.length ? ` <span class="rem">(bomba ${esc([...new Set(g.rem)].join(", "))})</span>` : ""}</td><td class="n">${g.m3 ? nf.format(g.m3) + " m³ bomb." : "—"}</td><td></td><td class="n">${money(g.v)}</td><td colspan="4"></td></tr>`).join("")}
       </tbody><tfoot><tr><td colspan="5">Subtotal ${esc(o.nome)}</td><td class="n">${m3(vol(o.ls))}</td><td class="n">${vol(cs) ? money(val(cs) / vol(cs)) : ""}</td><td class="n">${money(val(o.ls))}</td><td colspan="4" class="ensr">${cs.length ? "Ensaios 28d: " + txtEns(contaEns(cs)) : ""}</td></tr></tfoot></table>`; }).join("");
     return `<section class="pg">
       <header><img src="${logo}" alt=""><div><div class="emp">Tranenge · UN 464 · Duplicação BR-153</div><h1>Fechamento de concreto · NF ${esc(nfq)}</h1></div></header>
@@ -3130,6 +3282,7 @@ function conectar(banco) {
     orc = snap.exists ? snap.data() : {};
     renderAll();
   }, onErr);
+  db.doc("config/bt").onSnapshot((snap) => { btCfg = { padrao: 6, fornecedores: {}, bombaPadrao: 40, bomba: {}, ...(snap.exists ? snap.data() : {}) }; renderAll(); }, () => {});
   db.doc("config/reidi").onSnapshot((snap) => { reidi = snap.exists ? (snap.data().fornecedores || {}) : {}; renderAll(); }, () => {});
   db.collection("notas").onSnapshot((snap) => { notasNFe = snap.docs.map((d) => ({ id: d.id, ...d.data() })); if (!$("#mBiblio").hidden) renderBiblio(); }, () => {});
   db.collection("precos").onSnapshot((snap) => {
