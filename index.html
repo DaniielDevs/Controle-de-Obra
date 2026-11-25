@@ -676,7 +676,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 17h45</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 18h15</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -3292,18 +3292,23 @@ function capaNF() {
     const emis = rs.map((l) => l.dataNF).filter(Boolean).sort();
     const cps = (l, k) => { const e = (l.ensaios || {})[k] || {}; const v = [n2(e.cp1), n2(e.cp2)].filter((x) => x != null && x > 0); return v; };
     const NL = '<span class="bad">Não localizado</span>';
-    const ens = (l, k) => { const v = cps(l, k); if (!v.length) return NL; const m = Math.max(...v), f = n2(l.fckProjeto); return k === "d28" && f ? `<span class="${m >= f ? "okk" : "bad"}">${nf.format(m)}</span>` : nf.format(m); };
-    const sit = (l) => { const f = n2(l.fckProjeto), v28 = cps(l, "d28"); if (!v28.length) return "nl"; return f ? (Math.max(...v28) >= f ? "ok" : "abaixo") : "sem-fck"; };
-    const SIT = { ok: '<span class="okk">Atingiu</span>', abaixo: '<span class="bad">Abaixo do FCK</span>', nl: NL, "sem-fck": "—" };
-    const contaEns = (xs) => { const c = { ok: 0, abaixo: 0, nl: 0, "sem-fck": 0 }; for (const l of xs) if (!l.servico) c[sit(l)]++; return c; };
-    const txtEns = (c) => `${c.ok} atingiram${c.abaixo ? ` · <span class="bad">${c.abaixo} abaixo</span>` : ""}${c.nl ? ` · <span class="bad">${c.nl} não localizado(s)</span>` : ""}`;
+    // idade da remessa (pela data de emissão da remessa): antes de 7/28 dias o ensaio ainda não existe
+    const hoje = new Date(); hoje.setHours(12, 0, 0, 0);
+    const idade = (l) => (l.data ? Math.floor((hoje - new Date(l.data + "T12:00:00")) / 864e5) : 999);
+    const prazo = { d7: 7, d28: 28 };
+    const AG = (l, k) => { const d = new Date(l.data + "T12:00:00"); d.setDate(d.getDate() + prazo[k]); return `<span class="ag">Previsto ${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}</span>`; };
+    const ens = (l, k) => { const v = cps(l, k); if (!v.length) return idade(l) < prazo[k] ? AG(l, k) : NL; const m = Math.max(...v), f = n2(l.fckProjeto); return k === "d28" && f ? `<span class="${m >= f ? "okk" : "bad"}">${nf.format(m)}</span>` : nf.format(m); };
+    const sit = (l) => { const f = n2(l.fckProjeto), v28 = cps(l, "d28"); if (!v28.length) return idade(l) < 28 ? "ag" : "nl"; return f ? (Math.max(...v28) >= f ? "ok" : "abaixo") : "sem-fck"; };
+    const SIT = { ok: '<span class="okk">Atingiu</span>', abaixo: '<span class="bad">Abaixo do FCK</span>', nl: NL, ag: '<span class="ag">Aguardando</span>', "sem-fck": "—" };
+    const contaEns = (xs) => { const c = { ok: 0, abaixo: 0, nl: 0, ag: 0, "sem-fck": 0 }; for (const l of xs) if (!l.servico) c[sit(l)]++; return c; };
+    const txtEns = (c) => `${c.ok} atingiram${c.abaixo ? ` · <span class="bad">${c.abaixo} abaixo</span>` : ""}${c.nl ? ` · <span class="bad">${c.nl} não localizado(s)</span>` : ""}${c.ag ? ` · ${c.ag} aguardando 28 dias` : ""}`;
     const conc = (xs) => xs.filter((l) => !l.servico), serv = (xs) => xs.filter((l) => l.servico);
     const resumo = obrasG.map((o) => `<tr><td>${esc(o.nome)}</td><td class="n">${nRem(o.ls)}</td><td class="n">${m3(vol(o.ls))}</td><td class="n">${money(val(conc(o.ls)))}</td><td class="n">${serv(o.ls).length ? money(val(serv(o.ls))) : "—"}</td><td class="n"><b>${money(val(o.ls))}</b></td><td class="n">${totV ? nf.format((val(o.ls) / totV) * 100) + "%" : "—"}</td><td class="ensr">${nRem(o.ls) ? txtEns(contaEns(o.ls)) : "—"}</td></tr>`).join("");
     const servResumo = (xs) => { const m = new Map(); for (const l of xs) { const k = (l.peca || l.descricao || "Serviço de bomba").trim(); const g = m.get(k) || { k, n: 0, m3: 0, v: 0, rem: [], at: [] }; g.n++; g.m3 += Number(l.m3Bombeado) || 0; g.v += Number(l.valor) || 0; if (l.remessa) g.rem.push(l.remessa); (l.remessasBomba || []).forEach((r) => { const c = lancs.find((x) => x.categoria === "concreto" && !x.servico && remKey(x.remessa) === remKey(r)); g.at.push(r + (c && c.numero && String(c.numero) !== String(nfq) ? ` (NF ${c.numero})` : "")); }); m.set(k, g); } return [...m.values()]; };
     const detalhe = obrasG.map((o) => { const cs = conc(o.ls), ss = servResumo(serv(o.ls));
       return `<h3>${esc(o.nome)} <span>${nRem(o.ls)} remessa(s) · ${m3(vol(o.ls))} · ${money(val(o.ls))}</span></h3>
-      <table><thead><tr><th>Remessa</th><th>Data</th><th>Aplicação / peça</th><th class="n">FCK</th><th>Traço</th><th class="n">Volume</th><th class="n">R$/m³</th><th class="n">Valor</th><th class="n">7 dias (MPa)</th><th class="n">28 dias (MPa)</th><th>Resultado</th><th>Obs.</th></tr></thead><tbody>
-      ${cs.map((l) => `<tr><td>${esc(l.remessa || "—")}</td><td>${dt(l.data)}</td><td>${esc(l.peca || l.descricao || "")}</td><td class="n">${n2(l.fckProjeto) != null ? nf.format(l.fckProjeto) : "—"}</td><td>${esc(l.traco || "")}</td><td class="n">${m3(l.qtd)}</td><td class="n">${Number(l.qtd) ? money(Number(l.valor) / Number(l.qtd)) : "—"}</td><td class="n">${money(l.valor)}</td><td class="n">${ens(l, "d7")}</td><td class="n">${ens(l, "d28")}</td><td>${SIT[sit(l)]}</td><td class="obs">${esc(l.obs || "")}</td></tr>`).join("")}
+      <table class="det"><colgroup><col style="width:6.5%"><col style="width:8%"><col style="width:20%"><col style="width:3.5%"><col style="width:6%"><col style="width:5.5%"><col style="width:7%"><col style="width:8.5%"><col style="width:9%"><col style="width:9%"><col style="width:9%"><col style="width:8%"></colgroup><thead><tr><th>Remessa</th><th>Data</th><th>Aplicação / peça</th><th class="n">FCK</th><th>Traço</th><th class="n">Volume</th><th class="n">R$/m³</th><th class="n">Valor</th><th class="n">7 dias (MPa)</th><th class="n">28 dias (MPa)</th><th>Resultado</th><th>Obs.</th></tr></thead><tbody>
+      ${cs.map((l) => `<tr><td>${esc(l.remessa || "—")}</td><td>${dt(l.data)}</td><td>${esc(l.peca || l.descricao || "")}</td><td class="n">${n2(l.fckProjeto) != null ? nf.format(l.fckProjeto) : "—"}</td><td>${esc(l.traco || "")}</td><td class="n">${m3(l.qtd)}</td><td class="n">${Number(l.qtd) ? money(Number(l.valor) / Number(l.qtd)) : "—"}</td><td class="n">${money(l.valor)}</td><td class="n">${ens(l, "d7")}</td><td class="n">${ens(l, "d28")}</td><td class="nw">${SIT[sit(l)]}</td><td class="obs">${esc(String(l.obs || "").split(" | ").filter((x) => !/^Extrato de fornecimento$/i.test(x.trim())).join(" | "))}</td></tr>`).join("")}
       ${ss.map((g) => `<tr class="srv"><td colspan="5"><b>Bomba:</b> ${esc(g.k)} · ${g.n} lançamento(s)${g.at.length ? ` · <b>atendeu as remessas ${esc([...new Set(g.at)].join(", "))}</b>` : ""}${g.rem.length ? ` <span class="rem">(bomba ${esc([...new Set(g.rem)].join(", "))})</span>` : ""}</td><td class="n">${g.m3 ? nf.format(g.m3) + " m³ bomb." : "—"}</td><td></td><td class="n">${money(g.v)}</td><td colspan="4"></td></tr>`).join("")}
       </tbody><tfoot><tr><td colspan="5">Subtotal ${esc(o.nome)}</td><td class="n">${m3(vol(o.ls))}</td><td class="n">${vol(cs) ? money(val(cs) / vol(cs)) : ""}</td><td class="n">${money(val(o.ls))}</td><td colspan="4" class="ensr">${cs.length ? "Ensaios 28d: " + txtEns(contaEns(cs)) : ""}</td></tr></tfoot></table>`; }).join("");
     return `<section class="pg">
@@ -3338,7 +3343,9 @@ function capaNF() {
     h2 { font-size: 13px; color: #253a74; margin: 14px 0 6px; } h3 { font-size: 12px; margin: 12px 0 4px; } h3 span { font-weight: 400; color: #5b6478; font-size: 11px; }
     table { width: 100%; border-collapse: collapse; page-break-inside: auto; } tr { page-break-inside: avoid; }
     th { background: #eef1f8; text-align: left; font-size: 10px; text-transform: uppercase; color: #3b4560; padding: 5px 6px; } td { padding: 4px 6px; border-bottom: 1px solid #e6e9f0; }
-    .n { text-align: right; white-space: nowrap; } tfoot { display: table-row-group; } tr.srv td { background: #f6f7fb; color: #3b4560; } td.ensr, .ensr { font-size: 10px; font-weight: 400; } td.obs { max-width: 40mm; color: #5b6478; font-size: 9.5px; } .vz { color: #b3b9c7; } .okk { color: #1b7f3b; font-weight: 700; } .bad { color: #c0392b; font-weight: 700; } .rem { color: #8a92a6; font-size: 9.5px; } tfoot td { font-weight: 700; border-top: 2px solid #253a74; border-bottom: 0; }
+    .n { text-align: right; white-space: nowrap; }
+    table.det { table-layout: fixed; } table.det th { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } table.det td { overflow: hidden; text-overflow: ellipsis; } .nw { white-space: nowrap; }
+    table.det td:nth-child(3) { white-space: nowrap; } table.det tr.srv td { white-space: normal; } table.det tfoot td { overflow: visible; white-space: nowrap; } table.det td .bad, table.det td .okk { font-size: 10px; } tfoot { display: table-row-group; } tr.srv td { background: #f6f7fb; color: #3b4560; } td.ensr, .ensr { font-size: 10px; font-weight: 400; } td.obs { max-width: 40mm; color: #5b6478; font-size: 9.5px; } .vz { color: #6b7385; font-size: 10px; } .ag { color: #b26a00; font-weight: 700; font-size: 10px; } .okk { color: #1b7f3b; font-weight: 700; } .bad { color: #c0392b; font-weight: 700; } .rem { color: #8a92a6; font-size: 9.5px; } tfoot td { font-weight: 700; border-top: 2px solid #253a74; border-bottom: 0; }
     .ass { display: grid; grid-template-columns: 1fr 1fr 160px; gap: 22px; margin-top: 34px; page-break-inside: avoid; } .ass div { text-align: center; color: #3b4560; } .ass span { display: block; border-top: 1px solid #1c2333; margin-bottom: 4px; height: 0; }
     footer { margin-top: 14px; color: #8a92a6; font-size: 9.5px; text-align: center; }
     @media print { .barra { display: none; } .pg { padding-top: 0; } }
