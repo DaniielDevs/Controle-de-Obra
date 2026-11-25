@@ -663,7 +663,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 14h00</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 14h30</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -2342,7 +2342,7 @@ function renderLote() {
         <td><select data-k="obraId" style="width:130px">${obrasOpc(L.obraId)}</select></td>
         <td><select data-k="precoId" style="width:200px">${tiposOpc(L.fornecedor, L.precoId)}</select>${L.descExtrato ? `<div class="muted" style="font-size:11px;max-width:200px;white-space:normal">Extrato: ${esc(L.descExtrato)}${L.um && L.um.conc != null ? " · " + money(L.um.conc) + (L.servicoTipo ? "" : "/m³") : ""}</div>` : ""}</td>
         <td class="n"><input data-k="m3" value="${L.m3 ? fmtIn(L.m3) : ""}" inputmode="decimal" style="width:60px;text-align:right">${L.avisoBT ? `<div style="font-size:11px;max-width:170px;white-space:normal;text-align:left;color:${/^Extrato cobrou|não cobrou/.test(L.avisoBT) ? "var(--bad)" : "var(--muted)"}">${esc(L.avisoBT)}</div>` : ""}</td>
-        <td><input data-k="peca" value="${esc(L.peca || "")}" style="width:180px">${L.servicoTipo ? `<input data-k="remessasBomba" value="${esc((L.remessasBomba || []).join(", "))}" placeholder="Remessas atendidas" title="Remessas de concreto atendidas por esta bomba" style="width:180px;margin-top:4px"><div class="muted" style="font-size:11px;max-width:180px;white-space:normal">${(L.sugBomba || []).length ? "Mesmo dia: " + esc(L.sugBomba.map((x) => x.remessa + (x.numero ? " (NF " + x.numero + ")" : "")).join(", ")) : "Nenhuma concretagem lançada nesse dia."}</div>` : ""}</td>
+        <td><input data-k="peca" value="${esc(L.peca || "")}" style="width:180px">${L.servicoTipo ? `<input data-k="remessasBomba" value="${esc((L.remessasBomba || []).join(", "))}" placeholder="Remessas atendidas" title="Remessas de concreto atendidas por esta bomba" style="width:180px;margin-top:4px">${L.sugCalc ? `<div style="font-size:11px;max-width:180px;white-space:normal;font-weight:600;color:${L.sugAmbigua ? "var(--bad)" : "var(--ok)"}">${esc(L.sugCalc)}</div>` : ""}<div class="muted" style="font-size:11px;max-width:180px;white-space:normal">${(L.sugBomba || []).length ? "Mesmo dia: " + esc(L.sugBomba.map((x) => x.remessa + " · " + nf.format(x.m3 || 0) + " m³" + (x.numero ? " (NF " + x.numero + ")" : "")).join(", ")) : "Nenhuma concretagem lançada nesse dia."}</div>` : ""}</td>
         <td class="n">${c.total ? money(c.total) : "—"}</td>
         <td>${sit}</td></tr>`;
     }).join("") + `</tbody>`;
@@ -2350,10 +2350,11 @@ function renderLote() {
     el.onchange = () => {
       const L = loteLinhas[Number(el.closest("tr").dataset.i)], k = el.dataset.k;
       L[k] = k === "incluir" ? el.checked : k === "m3" ? parseNum(el.value) : k === "remessasBomba" ? listaRem(el.value) : el.value;
-      if (k === "remessasBomba") { loteLinhas.forEach((x) => { if (x !== L && x.servicoTipo && remKey(x.remessa) === remKey(L.remessa)) x.remessasBomba = L.remessasBomba.slice(); }); const os = [...new Set(L.remessasBomba.map((r) => ((L.sugBomba || []).find((x) => x.remessa === r) || {}).obraId).filter(Boolean))]; if (os.length === 1) loteLinhas.forEach((x) => { if (x.servicoTipo && remKey(x.remessa) === remKey(L.remessa) && !x.obraId) x.obraId = os[0]; }); }
+      if (k === "obraId") L.obraAuto = false;
+      if (k === "remessasBomba") { L.vincManual = L.remessasBomba.length > 0; loteLinhas.forEach((x) => { if (x !== L && x.servicoTipo && remKey(x.remessa) === remKey(L.remessa)) { x.remessasBomba = L.remessasBomba.slice(); x.vincManual = L.vincManual; } }); const os = [...new Set(L.remessasBomba.map((r) => ((L.sugBomba || []).find((x) => x.remessa === r) || {}).obraId).filter(Boolean))]; if (os.length === 1) loteLinhas.forEach((x) => { if (x.servicoTipo && remKey(x.remessa) === remKey(L.remessa) && !x.obraId) x.obraId = os[0]; }); }
       if (k === "remessa") L.existente = lancs.find((l) => l.categoria === "concreto" && !l.servico && remKey(l.remessa) === remKey(L.remessa)) || null;
       if (k === "fornecedor") L.precoId = null;
-      if (k === "m3" || k === "fornecedor" || k === "precoId" || k === "obraId" || k === "data") aplicaBTLote();
+      if (k === "m3" || k === "fornecedor" || k === "precoId" || k === "obraId" || k === "data" || k === "remessasBomba") aplicaBTLote();
       renderLote();
     };
     el.style.background = "var(--surface)"; el.style.border = "1px solid var(--line)"; el.style.borderRadius = "6px"; el.style.padding = "5px 6px";
@@ -2397,18 +2398,54 @@ function aplicaBombaLote() {
     const mn = minBomba(lan.fornecedor), ql = Number(lan.m3) || 0, qm = mi ? Number(mi.m3) || 0 : 0;
     if (ql && ql < mn && Math.abs(ql + qm - mn) > 0.004) (mi || lan).avisoBT = mi ? `Bomba: ${nf.format(ql)} + ${nf.format(qm)} m³ = ${nf.format(ql + qm)}; o mínimo é ${nf.format(mn)} m³.` : `Bomba lançou ${nf.format(ql)} m³ e o mínimo é ${nf.format(mn)} m³: falta o adicional de ${nf.format(mn - ql)} m³.`;
   }
-  // remessas atendidas: sugere pelas concretagens do mesmo dia (do lote e já lançadas); com uma bomba só no dia, já vincula
-  const porDia = new Map();
-  for (const L of loteLinhas) if (!L.aviso && !L.erro && L.servicoTipo === "bomba-lanca" && L.data) { if (!porDia.has(L.data)) porDia.set(L.data, []); porDia.get(L.data).push(L); }
-  for (const L of loteLinhas) {
-    if (L.aviso || L.erro || !L.servicoTipo || !L.data) continue;
-    const doLote = loteLinhas.filter((x) => !x.aviso && !x.erro && !x.servicoTipo && x.data === L.data && x.remessa && fornIgual(x.fornecedor || "", L.fornecedor || "")).map((x) => ({ remessa: String(Number(x.remessa)), numero: $("#ltNF").value, obraId: x.obraId || "", obra: x.obraId ? obraNome(x.obraId) : "" }));
-    const sug = [...doLote, ...remessasDoDia(L.data, null, L.fornecedor).filter((r) => !doLote.some((d) => d.remessa === String(Number(r.remessa))))];
-    L.sugBomba = sug;
-    const irmao = loteLinhas.find((x) => x !== L && x.servicoTipo && remKey(x.remessa) === remKey(L.remessa) && (x.remessasBomba || []).length);
-    if (!(L.remessasBomba || []).length && irmao) L.remessasBomba = irmao.remessasBomba.slice();
-    if (!(L.remessasBomba || []).length && (porDia.get(L.data) || []).length === 1 && sug.length) L.remessasBomba = sug.map((x) => x.remessa);
-    if (!L.obraId && (L.remessasBomba || []).length) { const os = [...new Set(L.remessasBomba.map((r) => (sug.find((x) => x.remessa === r) || {}).obraId).filter(Boolean))]; if (os.length === 1) L.obraId = os[0]; }
+  // remessas atendidas: no mesmo dia, a soma dos m³ das remessas tem que dar o m³ lançado pela bomba (ex.: 11 = 8 + 3)
+  const usadasFora = new Set(); for (const l of lancs) if (l.servico && (l.remessasBomba || []).length) l.remessasBomba.forEach((r) => usadasFora.add(remKey(r)));
+  const dias = new Map();
+  for (const L of loteLinhas) if (!L.aviso && !L.erro && L.servicoTipo && L.data) { const k = L.data + "|" + normF(L.fornecedor || ""); if (!dias.has(k)) dias.set(k, []); dias.get(k).push(L); }
+  for (const linhas of dias.values()) {
+    const L0 = linhas[0];
+    const doLote = loteLinhas.filter((x) => !x.aviso && !x.erro && !x.servicoTipo && x.data === L0.data && x.remessa && fornIgual(x.fornecedor || "", L0.fornecedor || "")).map((x) => ({ remessa: String(Number(x.remessa)), numero: $("#ltNF").value, obraId: x.obraId || "", obra: x.obraId ? obraNome(x.obraId) : "", m3: Number(x.m3) || 0 }));
+    const sug = [...doLote, ...remessasDoDia(L0.data, null, L0.fornecedor).filter((r) => !doLote.some((d) => d.remessa === r.remessa))];
+    linhas.forEach((x) => (x.sugBomba = sug));
+    // uma bomba = remessa SAP; a quantidade bombeada é a da linha "lança" (o adicional mínimo não conta)
+    const bombas = [...new Map(linhas.map((x) => [remKey(x.remessa), x])).keys()].map((k) => {
+      const g = linhas.filter((x) => remKey(x.remessa) === k), lan = g.find((x) => x.servicoTipo !== "minimo") || g[0];
+      return { k, g, q: Math.round((Number(lan.m3) || 0) * 100), manual: g.some((x) => x.vincManual) };
+    });
+    const fixas = new Set(); bombas.filter((b) => b.manual).forEach((b) => (b.g[0].remessasBomba || []).forEach((r) => fixas.add(r)));
+    const livres = sug.filter((r) => r.m3 > 0 && !fixas.has(r.remessa) && !usadasFora.has(remKey(r.remessa))).sort((a, b) => b.m3 - a.m3);
+    const alvo = bombas.filter((b) => !b.manual && b.q > 0);
+    // procura combinações exatas para todas as bombas do dia (cada remessa em no máximo uma bomba)
+    const sols = []; const vol = livres.map((r) => Math.round(r.m3 * 100));
+    const busca = (bi, usado, acc) => {
+      if (sols.length >= 40) return;
+      if (bi === alvo.length) { sols.push(acc.map((x) => x.slice())); return; }
+      const t = alvo[bi].q, cur = [];
+      const sub = (i, soma) => {
+        if (sols.length >= 40) return;
+        if (soma === t) { acc.push(cur.slice()); busca(bi + 1, usado, acc); acc.pop(); return; }
+        for (let j = i; j < livres.length; j++) {
+          if (usado[j] || soma + vol[j] > t) continue;
+          if (j > i && vol[j] === vol[j - 1] && !usado[j - 1] && !cur.includes(j - 1)) { /* evita repetir combinações iguais de volume */ }
+          usado[j] = true; cur.push(j); sub(j + 1, soma + vol[j]); cur.pop(); usado[j] = false;
+        }
+      };
+      sub(0, 0);
+    };
+    if (alvo.length && livres.length <= 40) busca(0, livres.map(() => false), []);
+    alvo.forEach((b, bi) => {
+      let opc = [...new Set(sols.map((s0) => s0[bi].map((j) => livres[j].remessa).sort().join(", ")))];
+      // empate: uma bomba atende uma obra, então prefere a combinação com remessas de uma obra só
+      if (opc.length > 1) { const umaObra = opc.filter((o) => new Set(o.split(", ").map((r) => (livres.find((x) => x.remessa === r) || {}).obraId || "?")).size === 1 && !o.split(", ").some((r) => !(livres.find((x) => x.remessa === r) || {}).obraId)); if (umaObra.length === 1) opc = umaObra; }
+      const qtxt = nf.format(b.q / 100);
+      let rem = [], txt;
+      if (opc.length === 1) { rem = opc[0].split(", "); txt = `${qtxt} m³ = ${rem.map((r) => `${r} (${nf.format(livres.find((x) => x.remessa === r).m3)})`).join(" + ")}`; }
+      else if (opc.length > 1) txt = `${qtxt} m³ pode ser: ${opc.slice(0, 4).join(" | ")}${opc.length > 4 ? ` | … (+${opc.length - 4})` : ""}. Informe qual.`;
+      else txt = `Nenhuma combinação das remessas do dia soma ${qtxt} m³. Informe à mão.`;
+      b.g.forEach((x) => { x.remessasBomba = rem.slice(); x.sugCalc = txt; x.sugAmbigua = opc.length !== 1; });
+    });
+    bombas.filter((b) => b.manual).forEach((b) => b.g.forEach((x) => (x.sugCalc = "Informado por você.")));
+    for (const b of bombas) for (const x of b.g) if ((x.remessasBomba || []).length && (!x.obraId || x.obraAuto)) { const os = [...new Set(x.remessasBomba.map((r) => (sug.find((y) => y.remessa === r) || {}).obraId).filter(Boolean))]; if (os.length === 1) { x.obraId = os[0]; x.obraAuto = true; } }
   }
 }
 function aplicaBTLote() {
@@ -2850,7 +2887,7 @@ function minBT(forn) {
 function remessasDoDia(data, ignorarId, forn) {
   if (!data) return [];
   const vistos = new Set();
-  return lancs.filter((l) => l.categoria === "concreto" && !l.servico && l.data === data && l.id !== ignorarId && (!forn || fornIgual(l.fornecedor || "", forn)) && !vistos.has(remKey(l.remessa)) && vistos.add(remKey(l.remessa))).map((l) => ({ remessa: l.remessa, numero: l.numero, obra: l.obraId ? obraNome(l.obraId) : "", obraId: l.obraId || "" })).sort((a, b) => String(a.remessa).localeCompare(String(b.remessa), undefined, { numeric: true }));
+  return lancs.filter((l) => l.categoria === "concreto" && !l.servico && l.data === data && l.id !== ignorarId && (!forn || fornIgual(l.fornecedor || "", forn)) && !vistos.has(remKey(l.remessa)) && vistos.add(remKey(l.remessa))).map((l) => ({ remessa: String(Number(l.remessa) || l.remessa), numero: l.numero, obra: l.obraId ? obraNome(l.obraId) : "", obraId: l.obraId || "", m3: Number(l.qtd) || 0 })).sort((a, b) => String(a.remessa).localeCompare(String(b.remessa), undefined, { numeric: true }));
 }
 const listaRem = (t) => [...new Set(String(t || "").split(/[,;\s]+/).map((x) => x.replace(/\D/g, "")).filter(Boolean).map((x) => String(Number(x))))];
 function minBomba(forn) {
