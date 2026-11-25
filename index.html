@@ -536,6 +536,10 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
           <input id="ltRemessas" type="file" multiple accept=".xml,.pdf,image/*" class="sr">
         </div>
       </div>
+      <div id="ltMassa" hidden style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px"><span style="font-size:13px">Preencher nas linhas marcadas:</span>
+        <select id="ltObraTodas" style="max-width:220px"></select><button class="btn" type="button" id="btnLtObra">Aplicar obra</button>
+        <select id="ltTipoTodas" style="max-width:260px"></select><button class="btn" type="button" id="btnLtTipo">Aplicar tipo (só concreto)</button>
+        <span class="muted" style="font-size:12px">Só preenche onde está vazio.</span></div>
       <div class="tbl-wrap"><table id="ltTabela"></table></div>
     </div>
     <div class="modal-f"><span class="muted" id="ltResumo" style="font-size:13px"></span><div class="right"><button class="btn" type="button" data-close>Cancelar</button><button class="btn primary" type="button" id="btnLoteSalvar" disabled>Salvar lançamentos</button></div></div>
@@ -651,7 +655,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 11h30</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 12h15</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -1485,7 +1489,7 @@ const pareceConcreto = (t) => /FCK|CONCRETO|CONCRETAD/i.test(t || "");
 function dataOk(d, m, y) { const dt = new Date(Number(y), Number(m) - 1, Number(d)); return y >= 2020 && y <= 2035 && dt.getMonth() === Number(m) - 1 && dt.getDate() === Number(d); }
 function parseNotaConcreto(texto) {
   const t = String(texto || "").replace(/\r/g, "");
-  const U = t.toUpperCase();
+  const U = t.toUpperCase().replace(/\bSL\s*(\d)\s(\d)(?=\s*[+±:])/g, "SL$1$2");
   const f = {};
   const chs = chavesDoTexto(U).filter((c) => c.slice(20, 22) === "55");
   if (chs.length) f.chave = chs[0];
@@ -1504,7 +1508,7 @@ function parseNotaConcreto(texto) {
   if (!esp) { const e2 = U.match(/AC\s*[<≤=]?\s*0[.,]\d{1,2}\s*C\W{0,2}\s*([0-9OQIL]{2})\s*\.?\s*B\s*([0-9OQDIL]{2})/); if (e2 && /^\d\d$/.test(dg(e2[1])) && /^\d\d$/.test(dg(e2[2]))) esp = [e2[0], dg(e2[1]), dg(e2[2])]; }
   const fk = U.match(/FCK[^0-9\n]{0,15}(\d{2})(?:[.,]\d)?\s*M?PA/) || U.match(/FCK\s*(\d{2})/); if (fk) f.fck = Number(fk[1]); else if (esp) f.fck = Number(esp[1]);
   const ac = U.match(/\bA\s*[\/I1L|]\s*C\s*[:=]?\s*(0[.,]\d{1,2})/) || U.match(/\bAC\s*[<≤=]?\s*(0[.,]\d{1,2})/); if (ac) f.ac = parseNum(ac[1]);
-  const sl = U.match(/SLUMP[^0-9\n]{0,10}(\d{1,3})\s*(?:±|\+\s*\/?\s*-)\s*(\d{1,2})/) || U.match(/[\[|]\s*(\d{2,3})\s*(?:±|\+\s*\/?\s*-)\s*(\d{1,2})\b/) || U.match(/\bSL\s*(\d{1,3})\s+(\d{1,2})\b/) || (() => { const m = U.match(/\bSL\s*([0-9OQIL]{1,3})\s*(?:\+\s*\/?\s*-|±)\s*([0-9OQIL]{1,2})/); return m && /^\d+$/.test(dg(m[1])) && /^\d+$/.test(dg(m[2])) ? [m[0], dg(m[1]), dg(m[2])] : null; })();
+  const sl = U.match(/SLUMP[^0-9\n]{0,10}(\d{1,3})\s*(?:±|\+\s*\/?\s*-)\s*(\d{1,2})/) || U.match(/[\[|]\s*(\d{2,3})\s*(?:±|\+\s*\/?\s*-)\s*(\d{1,2})\b/) || U.match(/\bSL\s*(\d{1,3})\s+(\d{1,2})\b/) || (() => { const m = U.match(/\bSL\s*([0-9OQIL]{1,3})\s*(?:\+\s*\/?\s*-|±|\+|:)\s*([0-9OQIL]{1,2})/); return m && /^\d+$/.test(dg(m[1])) && /^\d+$/.test(dg(m[2])) ? [m[0], dg(m[1]), dg(m[2])] : null; })();
   if (sl) { let a = Number(sl[1]), b = Number(sl[2]); if (a >= 40) { a = a / 10; b = b / 10; } f.slump = [a, b]; }
   const volTxt = [U.match(/VOLUME\s*:\s*(\d+[.,]\d+|\d+)/), U.match(/TRA[CÇ]O\s*:\s*(\d+[.,]\d+)\s*M[3³]/), U.match(/VOLUME DA CARGA[\s\S]{0,220}?(\d+[.,]?\d*)\s*M[3³]/), U.match(/\bM[3³]\s*\|?\s*(\d+[.,]\d+)\s/)].filter(Boolean).map((m) => m[1]);
   for (const vt of volTxt) {
@@ -1573,7 +1577,7 @@ function loadTesseract() {
   if (!tessReady) { tessReady = loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js").then(() => window.Tesseract); tessReady.catch(() => (tessReady = null)); }
   return tessReady;
 }
-let ocrWorkerLote = null;
+let ocrWorkerLote = null, ocrRotPref = 0;
 // Prepara a imagem para o OCR: gira (0/90/270°) e usa o canal mais claro de cada pixel,
 // o que apaga marca-texto amarelo/verde sem apagar o texto preto.
 function prepOcr(img, rot) {
@@ -1597,8 +1601,10 @@ async function ocrImagem(img) {
     const w = await wP;
     const ler = async (rot) => { const { data } = await w.recognize(prepOcr(img, rot)); return data.text || ""; };
     // Nota escaneada de lado: tenta girar se o texto não parecer uma nota
-    let melhor = await ler(0), pts = notaOcr(melhor);
-    for (const rot of [90, 270]) { if (pts >= 4) break; const t = await ler(rot), p = notaOcr(t); if (p > pts) { melhor = t; pts = p; } }
+    const ordem = [...new Set([ocrRotPref, 0, 90, 270])];
+    let melhor = "", pts = -1, rotM = 0;
+    for (const rot of ordem) { const t = await ler(rot), p = notaOcr(t); if (p > pts) { melhor = t; pts = p; rotM = rot; } if (pts >= 4) break; }
+    ocrRotPref = rotM;
     return melhor;
   } finally { if (temp) { try { (await wP).terminate(); } catch {} } }
 }
@@ -2156,6 +2162,19 @@ $("#btnExcluirObra").onclick = async (e) => {
 };
 
 /* ---------- Lançar notas em lote ---------- */
+const pdfCache = new WeakMap();
+async function pdfDoc(file) {
+  if (!pdfCache.has(file)) { const lib = await loadPdfJs(); pdfCache.set(file, lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise); }
+  return pdfCache.get(file);
+}
+async function textoDaPagina(file, n) {
+  const pdf = await pdfDoc(file), page = await pdf.getPage(n);
+  const c = await page.getTextContent(); const text = c.items.map((it) => it.str + (it.hasEOL ? "\n" : " ")).join("");
+  if (text.replace(/\s/g, "").length > 150) return { text };
+  const vp = page.getViewport({ scale: 3 }); const cv = document.createElement("canvas"); cv.width = vp.width; cv.height = vp.height;
+  await page.render({ canvasContext: cv.getContext("2d"), viewport: vp }).promise;
+  return { canvas: cv };
+}
 async function textoDoArquivo(file, precisaImagem) {
   const name = file.name.toLowerCase();
   if (name.endsWith(".xml") || file.type.includes("xml")) return { xml: await file.text() };
@@ -2173,7 +2192,50 @@ async function textoDoArquivo(file, precisaImagem) {
   if (file.type.startsWith("image/")) { const img = await createImageBitmap(file); const cv = document.createElement("canvas"); cv.width = img.width; cv.height = img.height; cv.getContext("2d").drawImage(img, 0, 0); return { canvas: cv }; }
   throw new Error("formato");
 }
-async function extrairRemessa(file) {
+// Tipo de página de um PDF de fechamento (NFS-e + boletos + extrato + remessas)
+function tipoPagina(t) {
+  const U = String(t || "").toUpperCase();
+  if (/EXTRATO\s+DE\s+FORNECIMENTO/.test(U)) return "extrato";
+  if ((U.match(/\d{9,10}\b[^\n]*?\d{2}[.\/]\d{2}[.\/]\d{4}[^\n]*\b(?:M3|M³|HR?|UN|VB)\b/g) || []).length >= 3) return "extrato";
+  const danfe = /DOCUMENTO AUXILIAR DA\s+NOTA FISCAL ELETR|DANFE\b|CHAVE DE ACESSO\s*(?!DA NFS)/.test(U) && !/NFS-?E/.test(U.slice(0, 600));
+  if (!danfe && /DANFSE|NFS-?E|DOCUMENTO AUXILIAR DA NFS|NOTA FISCAL DE SERVI/.test(U)) return "faturamento";
+  if (!danfe && /RECIBO DO SACADO|FICHA DE COMPENSA|LOCAL DE PAGAMENTO|NOSSO N[ÚU]MERO|AUTENTICA[ÇC][ÃA]O MEC/.test(U)) return "boleto";
+  return "remessa";
+}
+// Extrato de fornecimento (Engemix): uma linha por remessa / adicional / bomba, com qtd, unitário e total
+function numExtrato(x, casas = 2) {
+  let t = String(x || "").replace(/[^\d.,]/g, "");
+  if (!t) return null;
+  if (/[.,]\d{1,2}$/.test(t)) { const dec = t.match(/[.,](\d{1,2})$/)[1]; t = t.slice(0, -dec.length - 1).replace(/[.,]/g, "") + "." + dec; return parseFloat(t); }
+  t = t.replace(/[.,]/g, ""); if (t.length > casas) return parseFloat(t.slice(0, -casas) + "." + t.slice(-casas)); return parseFloat(t);
+}
+function parseExtrato(texto) {
+  const U = String(texto || "").toUpperCase().replace(/\r/g, "");
+  const folha = U.match(/FOLHA\s*:?\s*(\d+)\s*\/\s*(\d+)/);
+  const out = { folha: folha ? Number(folha[1]) : null, de: folha ? Number(folha[2]) : null, linhas: [] };
+  for (const raw of U.split("\n")) {
+    const m = raw.match(/(\d{9,10})\b.*?(\d{2})[.\/](\d{2})[.\/](\d{4})\s*[|\[(]?\s*(.+)$/); if (!m) continue;
+    let resto = m[5], q = null, un = null, tot = null, um = "";
+    const n = resto.match(/^(.*?)\s+([\d][\d.,]*)\s*[|\]]?\s*(M3|M³|MS|M2|H|HR|HS|UN|VB|KG)\b\s*[|\]]?\s*([\d][\d.,]*)\s+([^\s]*\d[^\s]*)/);
+    if (n) { resto = n[1]; um = n[3]; q = numExtrato(n[2]); un = numExtrato(n[4]); tot = numExtrato(n[5]); }
+    if (q != null && un) {
+      const calc = Math.round(q * un * 100) / 100;
+      if (tot == null || Math.abs(calc - tot) > Math.max(0.05, tot * 0.01)) { const q2 = tot ? Math.round((tot / un) * 100) / 100 : null; if (q2 && Math.abs(q2 * 4 - Math.round(q2 * 4)) < 0.02 && q2 < 60 && (q == null || q > 60)) q = q2; tot = Math.round(q * un * 100) / 100; }
+    }
+    const desc = resto.replace(/^[^A-Z]+/, "").replace(/\s{2,}/g, " ").trim();
+    out.linhas.push({ remessa: String(Number(m[1])), data: dataOk(m[2], m[3], m[4]) ? `${m[4]}-${m[3]}-${m[2]}` : "", desc, q, unit: un, total: tot, um });
+  }
+  return out;
+}
+const tipoLinhaExtrato = (d) => /BOMBA\s+LAN|LAN[ÇC]A\s+\d/.test(d) && !/MINIMO|M[ÍI]NIMO/.test(d) ? "bomba-lanca" : /MINIMO|M[ÍI]NIMO/.test(d) && /BOMBA/.test(d) ? "minimo" : /BOMBA|MANGOTE|ESTACION/.test(d) ? "bomba-mangote" : /FALTANTE/.test(d) ? "falt" : /DEVOLVID|DEVOLU/.test(d) ? "dev" : /HORA\s*EXTRA|\bH\.?\s?E\b/.test(d) ? "he" : /PERMAN|ESTADIA|HORA PARADA/.test(d) ? "perm" : /\bC\W{0,2}[0-9OIL]{2}\s*\.?\s*B\s*[0-9OIL]{2}|FCK|ESP\s+AC|CONCRETO/.test(d) ? "conc" : "outro";
+async function extrairRemessa(file, pagina) {
+  if (pagina) {
+    const r = await textoDaPagina(file, pagina);
+    const txt = r.text || await ocrImagem(r.canvas);
+    const tipo = tipoPagina(txt);
+    if (tipo === "remessa") return Object.assign(parseNotaConcreto(txt), { tipoPagina: tipo });
+    return { tipoPagina: tipo, texto: txt };
+  }
   const r = await textoDoArquivo(file);
   if (r.xml) {
     const x = parseXmlNota(r.xml); if (!x) throw new Error("xml");
@@ -2189,7 +2251,7 @@ async function extrairRemessa(file) {
 }
 function lerFaturamento(text) {
   const U = String(text || "").toUpperCase(), out = {};
-  const n = U.match(/N[ÚU]MERO\s+(?:DA\s+)?(?:NFS-?E|NOTA)[^0-9]{0,20}(\d{1,12})/) || U.match(/NFS-?E\s*N?[º°O.]?\s*:?\s*(\d{1,12})/) || U.match(/N[º°O]\s*[.,:]?\s*(\d{3}[.,]\d{3}[.,]\d{3}|\d{1,9})\b/);
+  const n = U.match(/N[ÚU]MERO DA NFS-?E[^\n]*\n\s*(\d{1,9})\b/) || U.match(/N[ÚU]MERO\s+(?:DA\s+)?(?:NFS-?E|NOTA)[^0-9]{0,20}(\d{1,9})\b/) || U.match(/NFS-?E\s*N?[º°O.]?\s*:?\s*(\d{1,12})/) || U.match(/N[º°O]\s*[.,:]?\s*(\d{3}[.,]\d{3}[.,]\d{3}|\d{1,9})\b/);
   if (n) out.numero = String(Number(n[1].replace(/\D/g, "")));
   const d = U.match(/(?:DATA\s+(?:E\s+HORA\s+)?D[AE]\s+EMISS[ÃA]O|EMITIDA\s+EM|EMISS[ÃA]O)[\s\S]{0,80}?(\d{2})\/(\d{2})\/(\d{4})/) || U.match(/(\d{2})\/(\d{2})\/(\d{4})/);
   if (d && dataOk(d[1], d[2], d[3])) out.data = `${d[3]}-${d[2]}-${d[1]}`;
@@ -2201,13 +2263,15 @@ const tiposOpc = (forn, sel) => `<option value="">— escolha —</option>` + ti
 const obrasOpc = (sel) => `<option value="">A definir</option>` + obras.filter((o) => o.ativa !== false).sort((a, b) => a.nome.localeCompare(b.nome)).map((o) => `<option value="${esc(o.id)}" ${o.id === sel ? "selected" : ""}>${esc(o.nome)}</option>`).join("");
 function renderLote() {
   const t = $("#ltTabela");
-  if (!loteLinhas.length) { t.innerHTML = ""; $("#btnLoteSalvar").disabled = true; $("#ltResumo").textContent = ""; return; }
+  if (!loteLinhas.length) { t.innerHTML = ""; $("#btnLoteSalvar").disabled = true; $("#ltResumo").textContent = ""; $("#ltMassa").hidden = true; $("#ltMassa").style.display = "none"; return; }
   t.innerHTML = `<thead><tr><th></th><th>Arquivo</th><th>Remessa</th><th>Emissão</th><th>Concreteira</th><th>Obra</th><th>Tipo do concreto</th><th class="n">m³</th><th>Aplicação</th><th class="n">Valor</th><th>Situação</th></tr></thead><tbody>` +
-    loteLinhas.map((L, i) => {
+    [...loteLinhas.map((L, i) => [L, i]).filter(([L]) => !L.aviso), ...(() => { const g = new Map(); for (const L of loteLinhas) if (L.aviso) { const k = L.aviso; if (!g.has(k)) g.set(k, []); g.get(k).push(L.arquivo); } return [...g.entries()].map(([av, arqs]) => [{ aviso: av, arquivo: arqs.length > 1 ? `${arqs[0]} … ${arqs[arqs.length - 1].replace(/^.* · /, "")} (${arqs.length})` : arqs[0] }, -1]); })()].map(([L, i]) => {
       if (L.lendo) return `<tr><td></td><td class="trunc">${esc(L.arquivo)}</td><td colspan="9" class="muted">Lendo…</td></tr>`;
       if (L.erro) return `<tr><td></td><td class="trunc">${esc(L.arquivo)}</td><td colspan="9" style="color:var(--bad)">${esc(L.erro)}</td></tr>`;
+      if (L.aviso) return `<tr><td></td><td class="trunc" style="max-width:140px">${esc(L.arquivo)}</td><td colspan="9" class="muted">${esc(L.aviso)}</td></tr>`;
       const c = calcConcreto(linhaParaLanc(L));
-      const sit = L.existente ? `<span class="pill warn">Já lançada · atualiza NF</span>` : (!L.obraId || !L.precoId || !L.m3 || !L.data) ? `<span class="pill bad">Completar</span>` : `<span class="pill ok">Nova</span>`;
+      const temPreco = L.precoId || (L.um && L.um.conc != null);
+      const sit = L.existente ? `<span class="pill warn">Já lançada · atualiza NF</span>` : (!L.obraId || !temPreco || !L.m3 || !L.data) ? `<span class="pill bad">Completar</span>` : `<span class="pill ok">Nova</span>`;
       return `<tr data-i="${i}">
         <td><input type="checkbox" data-k="incluir" ${L.incluir ? "checked" : ""} aria-label="Incluir"></td>
         <td class="trunc" style="max-width:140px">${esc(L.arquivo)}</td>
@@ -2215,7 +2279,7 @@ function renderLote() {
         <td><input type="date" data-k="data" value="${esc(L.data || "")}" style="width:130px"></td>
         <td><input data-k="fornecedor" value="${esc(L.fornecedor || "")}" list="fornLancList" style="width:130px"></td>
         <td><select data-k="obraId" style="width:130px">${obrasOpc(L.obraId)}</select></td>
-        <td><select data-k="precoId" style="width:200px">${tiposOpc(L.fornecedor, L.precoId)}</select></td>
+        <td><select data-k="precoId" style="width:200px">${tiposOpc(L.fornecedor, L.precoId)}</select>${L.descExtrato ? `<div class="muted" style="font-size:11px;max-width:200px;white-space:normal">Extrato: ${esc(L.descExtrato)}${L.um && L.um.conc != null ? " · " + money(L.um.conc) + (L.servicoTipo ? "" : "/m³") : ""}</div>` : ""}</td>
         <td class="n"><input data-k="m3" value="${L.m3 ? fmtIn(L.m3) : ""}" inputmode="decimal" style="width:60px;text-align:right"></td>
         <td><input data-k="peca" value="${esc(L.peca || "")}" style="width:180px"></td>
         <td class="n">${c.total ? money(c.total) : "—"}</td>
@@ -2231,37 +2295,121 @@ function renderLote() {
     };
     el.style.background = "var(--surface)"; el.style.border = "1px solid var(--line)"; el.style.borderRadius = "6px"; el.style.padding = "5px 6px";
   });
-  const ok = loteLinhas.filter((L) => !L.erro && !L.lendo && L.incluir);
+  const ok = loteLinhas.filter((L) => !L.erro && !L.lendo && !L.aviso && L.incluir);
   const tot = ok.filter((L) => !L.existente).reduce((a, L) => a + calcConcreto(linhaParaLanc(L)).total, 0);
   $("#ltResumo").textContent = `${ok.length} nota(s) selecionada(s): ${ok.filter((L) => !L.existente).length} nova(s), ${ok.filter((L) => L.existente).length} já lançada(s) · valor das novas ${money(tot)}`;
+  const ext = loteLinhas.filter((L) => L.descExtrato && !L.aviso && !L.erro);
+  if (ext.length) $("#ltResumo").textContent += ` · soma do extrato lido: ${money(ext.reduce((a, L) => a + calcConcreto(linhaParaLanc(L)).total, 0))}`;
   $("#btnLoteSalvar").disabled = !ok.length || loteLinhas.some((L) => L.lendo);
+  if (!loteLinhas.some((L) => L.lendo)) atualizaMassaLote();
 }
+function atualizaMassaLote() {
+  const tem = loteLinhas.some((L) => !L.aviso && !L.erro && !L.lendo);
+  const box = $("#ltMassa"); box.hidden = !tem; box.style.display = tem ? "flex" : "none"; if (!tem) return;
+  const forn = (loteLinhas.find((L) => L.fornecedor && !L.aviso) || {}).fornecedor || "";
+  $("#ltObraTodas").innerHTML = obrasOpc("").replace("A definir", "Obra…");
+  $("#ltTipoTodas").innerHTML = tiposOpc(forn, "").replace("— escolha —", "Tipo do concreto…").replace(/<option value="[^"]*">(?:Bombeamento|Adicional|M³|Outro)[^<]*<\/option>/g, "");
+}
+$("#btnLtObra").onclick = () => { const v = $("#ltObraTodas").value; if (!v) return; loteLinhas.forEach((L) => { if (!L.aviso && !L.erro && L.incluir && !L.obraId) L.obraId = v; }); renderLote(); };
+$("#btnLtTipo").onclick = () => { const v = $("#ltTipoTodas").value; if (!v) return; loteLinhas.forEach((L) => { if (!L.aviso && !L.erro && L.incluir && !L.servicoTipo && !L.precoId) L.precoId = v; }); renderLote(); };
 function linhaParaLanc(L) {
   const p = precos.find((x) => x.id === L.precoId);
-  return { categoria: "concreto", fornecedor: L.fornecedor, data: L.data, precoId: L.precoId || null, fckProjeto: p && !p.servico ? Number(p.fck) : (L.fck || null), qtd: p && p.servico ? 0 : (Number(L.m3) || 0), m3Bombeado: p && p.servico ? Number(L.m3) || 0 : 0, extras: {}, unitManual: {} };
+  const serv = (p && p.servico) || L.servicoTipo || "";
+  return { categoria: "concreto", fornecedor: L.fornecedor, data: L.data, precoId: L.precoId || null, fckProjeto: p && !p.servico ? Number(p.fck) : (serv ? null : L.fck || null), qtd: serv ? 0 : (Number(L.m3) || 0), m3Bombeado: serv ? Number(L.m3) || 0 : 0, servico: serv, extras: { ...(L.extras || {}) }, unitManual: { ...(L.um || {}) } };
+}
+const chaveLote = (L) => remKey(L.remessa) + "|" + (L.servicoTipo || "");
+function existenteLote(L) { return lancs.find((l) => l.categoria === "concreto" && remKey(l.remessa) === remKey(L.remessa) && (L.servicoTipo ? !!l.servico && (l.servico === L.servicoTipo || !l.servico) : !l.servico)) || null; }
+function linhasDoExtrato(ex, arquivo) {
+  // junta os adicionais (faltante, devolução, HE, permanência) na linha da própria remessa; bomba vira linha de serviço
+  const forn = "Engemix";
+  for (const x of ex.linhas) {
+    const tipo = tipoLinhaExtrato(x.desc);
+    const SERVS = ["bomba-lanca", "bomba-mangote", "minimo"];
+    if (SERVS.includes(tipo)) {
+      if (loteLinhas.some((L) => chaveLote(L) === x.remessa + "|" + tipo && remKey(L.remessa) === remKey(x.remessa))) continue;
+      const p = tiposConcreto(forn).find((y) => y.servico === tipo);
+      const L = { arquivo: `${arquivo} · extrato`, incluir: true, remessa: x.remessa, data: x.data, fornecedor: forn, obraId: "", m3: x.q, peca: x.desc, servicoTipo: tipo, precoId: p ? p.id : "", um: x.unit != null ? { conc: x.unit } : {}, extras: {}, descExtrato: x.desc };
+      L.existente = existenteLote(L); loteLinhas.push(L); continue;
+    }
+    let L = loteLinhas.find((y) => !y.servicoTipo && !y.aviso && remKey(y.remessa) === remKey(x.remessa));
+    if (tipo === "conc" || tipo === "outro") {
+      const f = parseNotaConcreto(x.desc);
+      if (!L) { L = { arquivo: `${arquivo} · extrato`, incluir: true, remessa: x.remessa, fornecedor: forn, obraId: "", peca: "", extras: {}, um: {} }; loteLinhas.push(L); }
+      Object.assign(L, { data: L.data || x.data, m3: x.q != null ? x.q : L.m3, fck: f.fck || L.fck || null, traco: f.traco || L.traco || "", descExtrato: x.desc });
+      if (x.unit != null) L.um.conc = x.unit;
+      if (!L.precoId && f.fck) { const tp = tracoDoContrato({ ...f, fornecedor: forn }); L.precoId = tp ? tp.id : ""; }
+      L.existente = existenteLote(L);
+    } else {
+      if (!L) { L = { arquivo: `${arquivo} · extrato`, incluir: true, remessa: x.remessa, data: x.data, fornecedor: forn, obraId: "", peca: "", extras: {}, um: {}, descExtrato: "" }; loteLinhas.push(L); L.existente = existenteLote(L); }
+      const k = { falt: ["m3Faltante", "falt"], dev: ["devolucaoM3", "dev"], he: ["he", "he"], perm: ["permanenciaH", "perm"] }[tipo];
+      L.extras[k[0]] = (Number(L.extras[k[0]]) || 0) + (Number(x.q) || 0); if (x.unit != null) L.um[k[1]] = x.unit;
+      L.descExtrato = [L.descExtrato, x.desc].filter(Boolean).join(" + ");
+    }
+  }
 }
 async function processarLote(files) {
-  const novos = [...files].map((f) => ({ arquivo: f.name, file: f, lendo: true, incluir: true }));
-  loteLinhas = loteLinhas.concat(novos); renderLote();
   const st = $("#ltStatus");
+  // PDF com várias páginas (NFS-e + boletos + extrato + remessas): cada página é lida separadamente
+  const itens = [];
+  for (const f of files) {
+    let n = 1;
+    if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") { try { n = (await pdfDoc(f)).numPages; } catch { n = 1; } }
+    if (n > 1) for (let k = 1; k <= n; k++) itens.push({ arquivo: `${f.name} · pág. ${k}`, nome: f.name, file: f, pagina: k, lendo: true, incluir: true });
+    else itens.push({ arquivo: f.name, nome: f.name, file: f, lendo: true, incluir: true });
+  }
+  loteLinhas = loteLinhas.concat(itens); renderLote();
   let usouOcr = false;
+  const folhas = new Map(); // arquivo → { de, lidas:Set }
   try {
-    for (let i = 0; i < novos.length; i++) {
-      const L = novos[i];
-      st.className = "status"; st.textContent = `Lendo ${i + 1} de ${novos.length}: ${L.arquivo}…`;
+    for (let i = 0; i < itens.length; i++) {
+      const L = itens[i];
+      const fx = folhas.get(L.nome);
+      if (L.pagina && fx && fx.de && fx.lidas.size >= fx.de && !L.forcar) {
+        Object.assign(L, { lendo: false, aviso: "Nota de remessa: não precisou ler, o extrato de fornecimento já trouxe todas as remessas desta NF." }); renderLote(); continue;
+      }
+      st.className = "status"; st.textContent = `Lendo ${i + 1} de ${itens.length}: ${L.arquivo}… (página escaneada pode levar alguns segundos)`;
       try {
         if (!usouOcr && !sample && !/\.xml$/i.test(L.arquivo)) { await abrirOcrLote().catch(() => null); usouOcr = true; }
-        const f = await extrairRemessa(L.file);
-        const o = f.km ? obras.find((x) => kmDe(x.km || x.nome) === kmDe(f.km)) : null;
-        Object.assign(L, { lendo: false, remessa: f.remessa || "", data: f.data || "", fornecedor: fornPadrao(f.fornecedor || ""), obraId: o ? o.id : "", m3: f.m3 || null, peca: f.peca || "", fck: f.fck || null, chave: f.chave || "", traco: f.traco || "", lacre: f.lacre || "" });
-        const tp = f.fck ? tracoDoContrato({ ...f, fornecedor: L.fornecedor }) : null; L.precoId = tp ? tp.id : "";
-        L.existente = lancs.find((l) => l.categoria === "concreto" && !l.servico && remKey(l.remessa) === remKey(L.remessa)) || null;
-        if (loteLinhas.some((x) => x !== L && !x.erro && !x.lendo && x.remessa && remKey(x.remessa) === remKey(L.remessa))) { L.erro = `Remessa ${L.remessa} repetida neste lote`; }
-      } catch (e) { console.error(e); Object.assign(L, { lendo: false, erro: "Não consegui ler este arquivo." }); }
+        const f = await extrairRemessa(L.file, L.pagina);
+        if (f.tipoPagina === "extrato") {
+          const ex = parseExtrato(f.texto);
+          const g = folhas.get(L.nome) || { de: null, lidas: new Set() }; if (ex.de) g.de = ex.de; g.lidas.add(ex.folha || g.lidas.size + 1); folhas.set(L.nome, g);
+          linhasDoExtrato(ex, L.nome);
+          Object.assign(L, { lendo: false, aviso: `Extrato de fornecimento${ex.folha ? ` (folha ${ex.folha}/${ex.de})` : ""}: ${ex.linhas.length} linha(s) lida(s) e lançadas na tabela.` });
+        } else if (f.tipoPagina === "faturamento") {
+          const info = lerFaturamento(f.texto);
+          if (info.numero && !$("#ltNF").value) $("#ltNF").value = info.numero;
+          if (info.data && !$("#ltData").value) $("#ltData").value = info.data;
+          Object.assign(L, { lendo: false, aviso: `Nota de faturamento${info.numero ? " NF " + info.numero : ""}${info.data ? " · " + fmtDate(info.data) : ""} (preenchida no item 1).` });
+        } else if (f.tipoPagina === "boleto") {
+          Object.assign(L, { lendo: false, aviso: "Boleto (ignorado)." });
+        } else {
+          const o = f.km ? obraMaisProxima(f.km) : null;
+          const ja = f.remessa && loteLinhas.find((x) => x !== L && !x.aviso && !x.erro && !x.lendo && !x.servicoTipo && remKey(x.remessa) === remKey(f.remessa));
+          if (ja) {
+            // completa a linha (do extrato) com o que só a nota tem
+            if (!ja.chave && f.chave) ja.chave = f.chave; if (!ja.peca && f.peca) ja.peca = f.peca; if (!ja.obraId && o) ja.obraId = o.id; if (!ja.lacre && f.lacre) ja.lacre = f.lacre; if (!ja.m3 && f.m3) ja.m3 = f.m3;
+            Object.assign(L, { lendo: false, aviso: `Remessa ${f.remessa}: completou a linha da tabela.` });
+          } else if (!f.remessa && !f.chave && !f.m3) {
+            Object.assign(L, { lendo: false, aviso: "Página sem remessa reconhecida (ignorada)." });
+          } else {
+            Object.assign(L, { lendo: false, remessa: f.remessa || "", data: f.data || "", fornecedor: fornPadrao(f.fornecedor || ""), obraId: o ? o.id : "", m3: f.m3 || null, peca: f.peca || "", fck: f.fck || null, chave: f.chave || "", traco: f.traco || "", lacre: f.lacre || "" });
+            const tp = f.fck ? tracoDoContrato({ ...f, fornecedor: L.fornecedor }) : null; L.precoId = tp ? tp.id : "";
+            L.existente = existenteLote(L);
+          }
+        }
+      } catch (e) { console.error(e); Object.assign(L, { lendo: false, erro: "Não consegui ler este arquivo/página." }); }
       renderLote();
     }
   } finally { await fecharOcrLote(); }
-  st.className = "status ok"; st.textContent = `${novos.length} arquivo(s) lido(s). Confira a tabela, corrija o que precisar e clique em "Salvar lançamentos".`;
+  // linha do extrato sem preço (ex.: quebrou na leitura): usa o unitário de outra remessa com o mesmo concreto
+  const normD = (d) => String(d || "").split(" + ")[0].toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/O(?=\d)/g, "0");
+  for (const L of loteLinhas) if (L.descExtrato && !L.servicoTipo && L.um && L.um.conc == null) { const o = loteLinhas.find((x) => x !== L && x.um && x.um.conc != null && !x.servicoTipo && normD(x.descExtrato) === normD(L.descExtrato)); if (o) { L.um.conc = o.um.conc; L.precoId = L.precoId || o.precoId; } }
+  // remessas repetidas no lote
+  const vistos = new Map();
+  for (const L of loteLinhas) { if (L.aviso || L.erro || L.lendo || !L.remessa) continue; const k = chaveLote(L); if (vistos.has(k)) { L.erro = `Remessa ${L.remessa} repetida neste lote`; } else vistos.set(k, L); }
+  renderLote();
+  st.className = "status ok"; st.textContent = `${itens.length} arquivo(s)/página(s) lido(s). Confira a tabela, corrija o que precisar e clique em "Salvar lançamentos".`;
 }
 $("#btnLote").onclick = () => { loteLinhas = []; $("#ltNF").value = ""; $("#ltData").value = ""; $("#ltStatus").textContent = ""; $("#ltNFStatus").textContent = ""; $("#ltRemessas").value = ""; $("#ltFile").value = ""; setCat("concreto"); renderLote(); openModal("mLote"); };
 $("#ltRemessas").addEventListener("change", (e) => { if (e.target.files.length) processarLote(e.target.files); e.target.value = ""; });
@@ -2289,7 +2437,7 @@ $("#btnLoteSalvar").onclick = async () => {
   if (!db) return;
   const btn = $("#btnLoteSalvar"), st = $("#ltStatus"); btn.disabled = true;
   const nfNum = $("#ltNF").value.trim(), nfData = $("#ltData").value;
-  const sel = loteLinhas.filter((L) => !L.erro && !L.lendo && L.incluir);
+  const sel = loteLinhas.filter((L) => !L.erro && !L.lendo && !L.aviso && L.incluir && L.remessa);
   let novos = 0, atual = 0, erros = 0;
   const run = async () => {
     for (const L of sel) {
@@ -2306,7 +2454,7 @@ $("#btnLoteSalvar").onclick = async () => {
           const p = precos.find((x) => x.id === L.precoId);
           await db.collection("lancamentos").doc().set({
             ...base, obraId: L.obraId || "", doc: "NF-e", numero: nfNum, dataNF: nfData, remessa: L.remessa, chave: L.chave || "", peca: L.peca || "", traco: L.traco || "",
-            servico: p && p.servico ? p.servico : "", unidade: "m³", descricao: "", obs: L.lacre ? "Lacre " + L.lacre : "",
+            servico: base.servico || "", unidade: "m³", descricao: L.descExtrato || "", obs: [L.lacre ? "Lacre " + L.lacre : "", L.descExtrato ? "Extrato de fornecimento" : ""].filter(Boolean).join(" | "),
             ensaios: { d7: { cp1: null, cp2: null, data: "" }, d14: { cp1: null, cp2: null, data: "" }, d28: { cp1: null, cp2: null, data: "" } },
             valor: c.total, valorCalculado: true, valorUnit: c.u.conc, valorConcreto: c.linhas.conc.total + c.linhas.reidi.total, subtotal: c.subtotal, reidiPct: c.pct,
             valoresLinhas: Object.fromEntries(Object.entries(c.linhas).map(([k, v]) => [k, { q: v.q, unit: v.unit, total: v.total }])),
@@ -2513,7 +2661,7 @@ function calcConcreto(l, lista = precos) {
     perm: um.perm != null ? um.perm : unitServ(l, "permanencia", lista, 300),
     dev: um.dev != null ? um.dev : unitServ(l, "devolucao", lista, 300),
   };
-  const q = { conc: (p && p.servico ? Number(l.m3Bombeado) : Number(l.qtd)) || 0, falt: Number(ex.m3Faltante) || 0, he: Number(ex.he) || 0, perm: Number(ex.permanenciaH) || 0, dev: Number(ex.devolucaoM3) || 0 };
+  const q = { conc: ((p && p.servico) || l.servico ? Number(l.m3Bombeado) : Number(l.qtd)) || 0, falt: Number(ex.m3Faltante) || 0, he: Number(ex.he) || 0, perm: Number(ex.permanenciaH) || 0, dev: Number(ex.devolucaoM3) || 0 };
   const r2 = (v) => Math.round(v * 100) / 100;
   // concreto pelo preço cheio do contrato; o REIDI vira uma linha de desconto no final
   const cheio = um.conc == null && vig ? Number(vig.valor) : null;
