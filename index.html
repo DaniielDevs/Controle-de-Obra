@@ -153,6 +153,19 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
 /* Modal */
 .overlay { position: fixed; inset: 0; background: rgba(10,15,20,.55); display: flex; align-items: flex-start; justify-content: center; padding: 30px 16px; overflow-y: auto; z-index: 20; }
 .overlay[hidden] { display: none; }
+/* janela do lote: ocupa a largura da tela e a tabela usa o espaço */
+#mLote { padding: 12px; }
+.modal-largo { width: 100% !important; max-width: none; min-height: calc(100vh - 24px); display: flex; flex-direction: column; }
+.modal-largo .modal-b { flex: 1; }
+.modal-largo .modal-f { position: sticky; bottom: -12px; padding-bottom: 24px; box-shadow: 0 -6px 12px rgba(0,0,0,.12); background: var(--surface); border-radius: 0 0 12px 12px; z-index: 2; }
+#ltTabela { width: 100%; }
+#ltTabela td, #ltTabela th { padding: 6px 6px; vertical-align: top; }
+#ltTabela input:not([type=checkbox]), #ltTabela select { width: 100% !important; min-width: 70px; }
+#ltTabela td:nth-child(2) { max-width: 120px !important; }
+#ltTabela td:nth-child(3) { min-width: 118px; } #ltTabela td:nth-child(4) { min-width: 130px; } #ltTabela td:nth-child(5) { min-width: 110px; }
+#ltTabela td:nth-child(6) { min-width: 150px; } #ltTabela td:nth-child(7) { min-width: 200px; } #ltTabela td:nth-child(8) { min-width: 70px; }
+#ltTabela td:nth-child(9) { min-width: 220px; } #ltTabela td:nth-child(10) { min-width: 100px; white-space: nowrap; } #ltTabela td:nth-child(11) { white-space: nowrap; }
+#ltTabela td > div { max-width: none !important; }
 .modal { background: var(--surface); border-radius: 12px; width: min(760px, 100%); border: 1px solid var(--line); box-shadow: 0 20px 50px rgba(0,0,0,.3); }
 .modal-h { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .modal-b { padding: 18px 20px; display: grid; gap: 16px; }
@@ -522,7 +535,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
 
 <!-- MODAL LOTE -->
 <div class="overlay" id="mLote" hidden>
-  <div class="modal" style="width:min(1180px,100%)">
+  <div class="modal modal-largo">
     <div class="modal-h"><h2>Lançar notas de concreto em lote</h2><button class="btn ghost small" type="button" data-close>Fechar</button></div>
     <div class="modal-b">
       <div class="subsec">
@@ -663,7 +676,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 14h30</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 15h00</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -2274,12 +2287,19 @@ function parseExtrato(texto) {
     }
     if (nums.length >= 2) {
       resto = tk.slice(0, k + 1).join(" ");
-      if (nums.length === 3) { q = numExtrato(nums[0]); un = numExtrato(nums[1]); tot = numExtrato(nums[2]); }
-      else { un = numExtrato(nums[0]); tot = numExtrato(nums[1]); q = un ? Math.round((tot / un) * 100) / 100 : null; }
-    }
-    if (q != null && un) {
-      const calc = Math.round(q * un * 100) / 100;
-      if (tot == null || Math.abs(calc - tot) > Math.max(0.05, tot * 0.01)) { const q2 = tot ? Math.round((tot / un) * 100) / 100 : null; if (q2 && Math.abs(q2 * 4 - Math.round(q2 * 4)) < 0.02 && q2 < 60 && (q == null || q > 60)) q = q2; tot = Math.round(q * un * 100) / 100; }
+      const v = nums.map((x) => numExtrato(x));
+      const plaus = (x) => x != null && x > 0 && x <= 60 && Math.abs(x * 4 - Math.round(x * 4)) < 0.03; // m³/h em múltiplos de 0,25
+      const fecha = (a1, u, t) => a1 != null && u && t != null && Math.abs(a1 * u - t) <= Math.max(0.05, t * 0.01);
+      if (v.length === 3 && plaus(v[0]) && fecha(v[0], v[1], v[2])) { q = v[0]; un = v[1]; tot = v[2]; }
+      else if (v.length === 3 && v[2] == null && plaus(v[0]) && v[1]) { q = v[0]; un = v[1]; tot = Math.round(q * un * 100) / 100; }
+      else {
+        // escolhe unitário e total entre os números lidos de forma que total ÷ unitário dê uma quantidade plausível
+        const n = v.length; let ach = null;
+        for (const [iu, it] of [[n - 2, n - 1], [0, n - 1], [0, 1], [1, 2]]) { const u = v[iu], t = v[it]; if (iu !== it && u && t && t > u && it < n) { const q2 = Math.round((t / u) * 100) / 100; if (plaus(q2)) { ach = [q2, u, t]; break; } } }
+        if (ach) [q, un, tot] = ach;
+        else if (n === 3 && plaus(v[0]) && v[1]) { q = v[0]; un = v[1]; tot = Math.round(v[0] * v[1] * 100) / 100; }
+        else { q = null; un = v[n - 2]; tot = v[n - 1]; }
+      }
     }
     const desc = resto.replace(/^[^A-Z]+/, "").replace(/\s{2,}/g, " ").trim();
     out.linhas.push({ remessa: String(Number(m[1])), data: dataOk(m[2], m[3], m[4]) ? `${m[4]}-${m[3]}-${m[2]}` : "", desc, q, unit: un, total: tot, um });
