@@ -288,6 +288,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
         <div class="field"><label for="fMes">Mês da remessa</label><input id="fMes" type="month"></div>
         <div class="field grow"><label for="fBusca">Buscar</label><input id="fBusca" type="search" placeholder="Remessa, aplicação, chave…"></div>
         <div class="field"><span style="font-size:12px">&nbsp;</span><button class="btn" type="button" id="btnLimparFiltros">Limpar filtros</button></div>
+        <div class="field" id="capaBox"><span style="font-size:12px">&nbsp;</span><button class="btn primary" type="button" id="btnCapaNF" title="Relatório de fechamento da NF: capa para as remessas impressas">Capa da NF</button></div>
       </div>
       <div class="tbl-wrap"><table id="tblLanc"></table></div>
     </div>
@@ -650,7 +651,7 @@ tfoot td { font-weight: 600; background: var(--surface-2); }
   </form>
 </div>
 
-<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 23/11/2026 19h30</footer>
+<footer style="max-width:1240px;margin:0 auto;padding:8px 20px 24px;font-size:12px;color:var(--muted)">Controle de Obra · versão 25/11/2026 10h30</footer>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="config.js"></script>
@@ -901,7 +902,7 @@ function fillFiltros() {
   fill("fTipo", tipos, "Todos");
   $("#fNFList").innerHTML = [...new Set(ls.map((l) => l.numero).filter(Boolean))].sort((a, b) => Number(b) - Number(a)).slice(0, 300).map((v) => `<option value="${esc(v)}">`).join("");
   $("#fFornLabel").textContent = lancCat === "frete" ? "Transportadora" : lancCat === "concreto" ? "Concreteira" : "Fornecedor";
-  $("#fEnsBox").hidden = lancCat !== "concreto"; if (lancCat !== "concreto") $("#fEns").value = "";
+  $("#capaBox").hidden = lancCat !== "concreto"; $("#fEnsBox").hidden = lancCat !== "concreto"; if (lancCat !== "concreto") $("#fEns").value = "";
   $("#fTipoLabel").textContent = lancCat === "concreto" ? "Tipo de concreto" : lancCat === "aco" ? "Tipo / bitola" : "Material";
 }
 function filteredLancs() {
@@ -2749,6 +2750,91 @@ $("#obraGlobal").onchange = () => { renderPainel(); renderLancs(); };
 $("#fMes").onchange = renderLancs;
 ["fForn", "fTipo", "fEns", "fEmiDe", "fEmiAte"].forEach((id) => ($("#" + id).onchange = renderLancs));
 $("#fNF").oninput = renderLancs;
+// ---------- Capa da NF (relatório de fechamento das remessas de concreto) ----------
+function capaNF() {
+  const nfq = $("#fNF").value.replace(/\D/g, "").replace(/^0+/, "");
+  if (!nfq) { toast("Digite o nº da NF de faturamento no filtro \"Nota fiscal\" e clique em Capa da NF."); $("#fNF").focus(); return; }
+  const forn = $("#fForn").value;
+  const ls = lancs.filter((l) => l.categoria === "concreto" && String(l.numero || "").replace(/\D/g, "").replace(/^0+/, "") === nfq && (!forn || fornIgual(l.fornecedor || "", forn)));
+  if (!ls.length) { toast(`Nenhuma remessa de concreto com a NF ${nfq}${forn ? " de " + forn : ""}.`); return; }
+  // Uma capa por fornecedor (a mesma numeração pode existir em duas concreteiras)
+  const porForn = [];
+  for (const l of ls) { let g = porForn.find((x) => (l.fornecedor ? fornIgual(x.forn, l.fornecedor) : x.forn === "Fornecedor não informado")); if (!g) porForn.push((g = { forn: l.fornecedor || "Fornecedor não informado", ls: [] })); g.ls.push(l); }
+  const logo = $(".brand-mark") ? $(".brand-mark").src : "";
+  const quem = ($("#userEmail") && $("#userEmail").textContent) || "";
+  const agora = new Date();
+  const dt = (d) => (d ? fmtDate(d) : "—");
+  const m3 = (v) => nf.format(Number(v) || 0) + " m³";
+  const reidiDe = (l) => { try { const c = calcValor(l); return c && c.linhas && c.linhas.reidi ? -Number(c.linhas.reidi.total || 0) : 0; } catch { return 0; } };
+  const paginas = porForn.map((g) => {
+    const rs = g.ls.slice().sort((a, b) => String(a.data || "").localeCompare(String(b.data || "")) || String(a.remessa || "").localeCompare(String(b.remessa || ""), undefined, { numeric: true }));
+    const obrasG = [];
+    for (const l of rs) { let o = obrasG.find((x) => x.id === (l.obraId || "")); if (!o) obrasG.push((o = { id: l.obraId || "", nome: obraNome(l.obraId), ls: [] })); o.ls.push(l); }
+    obrasG.sort((a, b) => a.nome.localeCompare(b.nome, undefined, { numeric: true }));
+    const vol = (xs) => xs.reduce((a, l) => a + (l.servico ? 0 : Number(l.qtd) || 0), 0);
+    const val = (xs) => xs.reduce((a, l) => a + (Number(l.valor) || 0), 0);
+    const nRem = (xs) => xs.filter((l) => !l.servico).length;
+    const totV = val(rs), totM = vol(rs), reidi = rs.reduce((a, l) => a + reidiDe(l), 0);
+    const datas = rs.map((l) => l.data).filter(Boolean).sort();
+    const emis = rs.map((l) => l.dataNF).filter(Boolean).sort();
+    const cps = (l, k) => { const e = (l.ensaios || {})[k] || {}; const v = [n2(e.cp1), n2(e.cp2)].filter((x) => x != null && x > 0); return v; };
+    const NL = '<span class="bad">Não localizado</span>';
+    const ens = (l, k) => { const v = cps(l, k); if (!v.length) return NL; const m = Math.max(...v), f = n2(l.fckProjeto); return k === "d28" && f ? `<span class="${m >= f ? "okk" : "bad"}">${nf.format(m)}</span>` : nf.format(m); };
+    const sit = (l) => { const f = n2(l.fckProjeto), v28 = cps(l, "d28"); if (!v28.length) return "nl"; return f ? (Math.max(...v28) >= f ? "ok" : "abaixo") : "sem-fck"; };
+    const SIT = { ok: '<span class="okk">Atingiu</span>', abaixo: '<span class="bad">Abaixo do FCK</span>', nl: NL, "sem-fck": "—" };
+    const contaEns = (xs) => { const c = { ok: 0, abaixo: 0, nl: 0, "sem-fck": 0 }; for (const l of xs) if (!l.servico) c[sit(l)]++; return c; };
+    const txtEns = (c) => `${c.ok} atingiram${c.abaixo ? ` · <span class="bad">${c.abaixo} abaixo</span>` : ""}${c.nl ? ` · <span class="bad">${c.nl} não localizado(s)</span>` : ""}`;
+    const conc = (xs) => xs.filter((l) => !l.servico), serv = (xs) => xs.filter((l) => l.servico);
+    const resumo = obrasG.map((o) => `<tr><td>${esc(o.nome)}</td><td class="n">${nRem(o.ls)}</td><td class="n">${m3(vol(o.ls))}</td><td class="n">${money(val(conc(o.ls)))}</td><td class="n">${serv(o.ls).length ? money(val(serv(o.ls))) : "—"}</td><td class="n"><b>${money(val(o.ls))}</b></td><td class="n">${totV ? nf.format((val(o.ls) / totV) * 100) + "%" : "—"}</td><td class="ensr">${nRem(o.ls) ? txtEns(contaEns(o.ls)) : "—"}</td></tr>`).join("");
+    const servResumo = (xs) => { const m = new Map(); for (const l of xs) { const k = (l.peca || l.descricao || "Serviço de bomba").trim(); const g = m.get(k) || { k, n: 0, m3: 0, v: 0, rem: [] }; g.n++; g.m3 += Number(l.m3Bombeado) || 0; g.v += Number(l.valor) || 0; if (l.remessa) g.rem.push(l.remessa); m.set(k, g); } return [...m.values()]; };
+    const detalhe = obrasG.map((o) => { const cs = conc(o.ls), ss = servResumo(serv(o.ls));
+      return `<h3>${esc(o.nome)} <span>${nRem(o.ls)} remessa(s) · ${m3(vol(o.ls))} · ${money(val(o.ls))}</span></h3>
+      <table><thead><tr><th>Remessa</th><th>Data</th><th>Aplicação / peça</th><th class="n">FCK</th><th>Traço</th><th class="n">Volume</th><th class="n">R$/m³</th><th class="n">Valor</th><th class="n">7 dias (MPa)</th><th class="n">28 dias (MPa)</th><th>Resultado</th><th>Obs.</th></tr></thead><tbody>
+      ${cs.map((l) => `<tr><td>${esc(l.remessa || "—")}</td><td>${dt(l.data)}</td><td>${esc(l.peca || l.descricao || "")}</td><td class="n">${n2(l.fckProjeto) != null ? nf.format(l.fckProjeto) : "—"}</td><td>${esc(l.traco || "")}</td><td class="n">${m3(l.qtd)}</td><td class="n">${Number(l.qtd) ? money(Number(l.valor) / Number(l.qtd)) : "—"}</td><td class="n">${money(l.valor)}</td><td class="n">${ens(l, "d7")}</td><td class="n">${ens(l, "d28")}</td><td>${SIT[sit(l)]}</td><td class="obs">${esc(l.obs || "")}</td></tr>`).join("")}
+      ${ss.map((g) => `<tr class="srv"><td colspan="5"><b>Bomba:</b> ${esc(g.k)} · ${g.n} lançamento(s)${g.rem.length ? ` <span class="rem">(remessas ${esc([...new Set(g.rem)].join(", "))})</span>` : ""}</td><td class="n">${g.m3 ? nf.format(g.m3) + " m³ bomb." : "—"}</td><td></td><td class="n">${money(g.v)}</td><td colspan="4"></td></tr>`).join("")}
+      </tbody><tfoot><tr><td colspan="5">Subtotal ${esc(o.nome)}</td><td class="n">${m3(vol(o.ls))}</td><td class="n">${vol(cs) ? money(val(cs) / vol(cs)) : ""}</td><td class="n">${money(val(o.ls))}</td><td colspan="4" class="ensr">${cs.length ? "Ensaios 28d: " + txtEns(contaEns(cs)) : ""}</td></tr></tfoot></table>`; }).join("");
+    return `<section class="pg">
+      <header><img src="${logo}" alt=""><div><div class="emp">Tranenge · UN 464 · Duplicação BR-153</div><h1>Fechamento de concreto · NF ${esc(nfq)}</h1></div></header>
+      <div class="cards">
+        <div><small>Concreteira</small><b>${esc(g.forn)}</b></div>
+        <div><small>Nota fiscal</small><b>NF ${esc(nfq)}</b><span>${emis.length ? "emitida em " + dt(emis[0]) : "data de emissão não informada"}</span></div>
+        <div><small>Período das remessas</small><b>${datas.length ? dt(datas[0]) + (datas[datas.length - 1] !== datas[0] ? " a " + dt(datas[datas.length - 1]) : "") : "—"}</b></div>
+        <div><small>Remessas</small><b>${nRem(rs)}</b><span>${obrasG.length} obra(s)${rs.length - nRem(rs) ? " · " + (rs.length - nRem(rs)) + " serviço(s) de bomba" : ""}</span></div>
+        <div><small>Volume concretado</small><b>${m3(totM)}</b><span>Ensaios 28d: ${txtEns(contaEns(rs))}</span></div>
+        <div class="dest"><small>Valor da NF (lançado)</small><b>${money(totV)}</b>${reidi > 0.004 ? `<span>já com desconto REIDI de ${money(reidi)}</span>` : ""}</div>
+      </div>
+      <h2>Resumo por obra</h2>
+      <table><thead><tr><th>Obra</th><th class="n">Remessas</th><th class="n">Volume</th><th class="n">Concreto</th><th class="n">Bomba</th><th class="n">Total</th><th class="n">% da NF</th><th>Ensaios de 28 dias</th></tr></thead><tbody>${resumo}</tbody>
+      <tfoot><tr><td>Total</td><td class="n">${nRem(rs)}</td><td class="n">${m3(totM)}</td><td class="n">${money(val(conc(rs)))}</td><td class="n">${serv(rs).length ? money(val(serv(rs))) : "—"}</td><td class="n">${money(totV)}</td><td class="n">100%</td><td class="ensr">${txtEns(contaEns(rs))}</td></tr></tfoot></table>
+      <h2>Remessas por obra</h2>${detalhe}
+      <div class="ass"><div><span></span>Conferido por (Administrativo)</div><div><span></span>Aprovado por (Gerente)</div><div><span></span>Data</div></div>
+      <footer>Gerado pelo Controle de Obra em ${agora.toLocaleDateString("pt-BR")} às ${agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}${quem ? " · " + esc(quem) : ""} · As remessas impressas seguem anexas a esta capa.</footer>
+    </section>`;
+  }).join("");
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Capa NF ${esc(nfq)}</title><style>
+    @page { size: A4 landscape; margin: 10mm; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; } body { font: 11px/1.4 "Segoe UI", Arial, sans-serif; color: #1c2333; margin: 0; }
+    .barra { position: sticky; top: 0; background: #253a74; color: #fff; padding: 10px 16px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+    .barra button { background: #fff; color: #253a74; border: 0; border-radius: 6px; padding: 8px 14px; font-weight: 700; cursor: pointer; }
+    .pg { max-width: 277mm; margin: 0 auto; padding: 16px 0 8px; page-break-after: always; } .pg:last-child { page-break-after: auto; }
+    header { display: flex; gap: 12px; align-items: center; border-bottom: 3px solid #253a74; padding-bottom: 8px; }
+    header img { width: 42px; height: 42px; border-radius: 6px; } .emp { color: #5b6478; font-size: 11px; } h1 { font-size: 19px; margin: 2px 0 0; color: #253a74; }
+    .cards { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 12px 0; }
+    .cards div { border: 1px solid #d5dbe8; border-radius: 6px; padding: 7px 9px; } .cards small { display: block; color: #5b6478; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; }
+    .cards b { display: block; font-size: 14px; } .cards span { color: #5b6478; font-size: 10px; } .cards .dest { background: #253a74; color: #fff; border-color: #253a74; } .cards .dest small, .cards .dest span { color: #c9d3ee; }
+    h2 { font-size: 13px; color: #253a74; margin: 14px 0 6px; } h3 { font-size: 12px; margin: 12px 0 4px; } h3 span { font-weight: 400; color: #5b6478; font-size: 11px; }
+    table { width: 100%; border-collapse: collapse; page-break-inside: auto; } tr { page-break-inside: avoid; }
+    th { background: #eef1f8; text-align: left; font-size: 10px; text-transform: uppercase; color: #3b4560; padding: 5px 6px; } td { padding: 4px 6px; border-bottom: 1px solid #e6e9f0; }
+    .n { text-align: right; white-space: nowrap; } tfoot { display: table-row-group; } tr.srv td { background: #f6f7fb; color: #3b4560; } td.ensr, .ensr { font-size: 10px; font-weight: 400; } td.obs { max-width: 40mm; color: #5b6478; font-size: 9.5px; } .vz { color: #b3b9c7; } .okk { color: #1b7f3b; font-weight: 700; } .bad { color: #c0392b; font-weight: 700; } .rem { color: #8a92a6; font-size: 9.5px; } tfoot td { font-weight: 700; border-top: 2px solid #253a74; border-bottom: 0; }
+    .ass { display: grid; grid-template-columns: 1fr 1fr 160px; gap: 22px; margin-top: 34px; page-break-inside: avoid; } .ass div { text-align: center; color: #3b4560; } .ass span { display: block; border-top: 1px solid #1c2333; margin-bottom: 4px; height: 0; }
+    footer { margin-top: 14px; color: #8a92a6; font-size: 9.5px; text-align: center; }
+    @media print { .barra { display: none; } .pg { padding-top: 0; } }
+  </style></head><body><div class="barra"><span>Capa da NF ${esc(nfq)} · confira e imprima (ou salve em PDF)</span><button onclick="print()">Imprimir / salvar PDF</button></div>${paginas}</body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) { toast("O navegador bloqueou a janela do relatório: permita pop-ups para este site."); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+$("#btnCapaNF").onclick = capaNF;
 $("#btnLimparFiltros").onclick = () => { ["fNF", "fEmiDe", "fEmiAte", "fMes", "fBusca"].forEach((id) => ($("#" + id).value = "")); $("#fForn").value = ""; $("#fTipo").value = ""; $("#fEns").value = ""; renderLancs(); };
 $("#fBusca").oninput = renderLancs;
 $("#btnCsv").onclick = copiarCsv;
